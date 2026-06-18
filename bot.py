@@ -5,11 +5,13 @@ import os
 from datetime import datetime
 from flask import Flask
 import threading
+import re
 
 # --------------------- الإعدادات ---------------------
 TOKEN = "8952384966:AAH6509zEqo73asesJRBzPutsuyqD-eZqzM"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
+SALARY_RATE = 0.005  # نسبة الراتب
 
 # إنشاء البوت
 bot = telebot.TeleBot(TOKEN)
@@ -35,6 +37,10 @@ def load_data():
 def save_data(data):
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+def calculate_salary(amount):
+    """حساب الراتب بناءً على المبلغ"""
+    return round(amount * SALARY_RATE, 2)
 
 last_reset_date = datetime.now().date()
 
@@ -67,6 +73,8 @@ def add_transaction(user_id, username, amount, currency, note=""):
             "total_out_sy": 0,
             "total_in_usd": 0,
             "total_out_usd": 0,
+            "salary_sy": 0,
+            "salary_usd": 0,
             "transactions": []
         }
     
@@ -77,6 +85,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
         else:
             data[user_id_str]["balance_sy"] += amount
             data[user_id_str]["total_out_sy"] += abs(amount)
+            data[user_id_str]["salary_sy"] = calculate_salary(data[user_id_str]["total_out_sy"])
     else:
         if amount > 0:
             data[user_id_str]["balance_usd"] += amount
@@ -84,6 +93,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
         else:
             data[user_id_str]["balance_usd"] += amount
             data[user_id_str]["total_out_usd"] += abs(amount)
+            data[user_id_str]["salary_usd"] = calculate_salary(data[user_id_str]["total_out_usd"])
     
     trans_type = "استلام" if amount > 0 else "دفع"
     emoji = "✅" if amount > 0 else "❌"
@@ -102,14 +112,16 @@ def add_transaction(user_id, username, amount, currency, note=""):
         new_balance = data[user_id_str]["balance_sy"]
         total_in = data[user_id_str]["total_in_sy"]
         total_out = data[user_id_str]["total_out_sy"]
+        salary = data[user_id_str]["salary_sy"]
         currency_symbol = "🇸🇾 ل.س"
     else:
         new_balance = data[user_id_str]["balance_usd"]
         total_in = data[user_id_str]["total_in_usd"]
         total_out = data[user_id_str]["total_out_usd"]
+        salary = data[user_id_str]["salary_usd"]
         currency_symbol = "💵 USD"
     
-    return new_balance, abs(amount), trans_type, emoji, currency_symbol, total_in, total_out, data[user_id_str]["username"]
+    return new_balance, abs(amount), trans_type, emoji, currency_symbol, total_in, total_out, salary, data[user_id_str]["username"]
 
 def get_user_full_report(user_id):
     data = load_data()
@@ -117,24 +129,6 @@ def get_user_full_report(user_id):
     if user_id_str not in data:
         return None
     return data[user_id_str]
-
-def format_balance_report(username, balance_sy, balance_usd, total_in_sy, total_out_sy, total_in_usd, total_out_usd, transactions_count):
-    report = f"📊 *تقرير رصيد {username}*\n"
-    report += "═" * 20 + "\n\n"
-    
-    report += "🇸🇾 *الليرة السورية:*\n"
-    report += f"   💰 الرصيد: *{balance_sy}* ل.س\n"
-    report += f"   📥 إجمالي المستلم: {total_in_sy} ل.س\n"
-    report += f"   📤 إجمالي المدفوع: {total_out_sy} ل.س\n\n"
-    
-    report += "💵 *الدولار الأمريكي:*\n"
-    report += f"   💰 الرصيد: *{balance_usd}* USD\n"
-    report += f"   📥 إجمالي المستلم: {total_in_usd} USD\n"
-    report += f"   📤 إجمالي المدفوع: {total_out_usd} USD\n\n"
-    
-    report += f"📝 عدد المعاملات اليوم: {transactions_count}"
-    
-    return report
 
 # --------------------- أوامر البوت الأساسية ---------------------
 
@@ -150,20 +144,63 @@ def start(message):
         "`+100$` أو `استلام 100 دولار`\n\n"
         "📌 *لخصم مبلغ مدفوع بالدولار:*\n"
         "`-50$` أو `دفع 50 دولار`\n\n"
-        "📊 *عرض تقرير مفصل:*\n"
-        "`/report` - تقرير اليوم للجميع\n"
-        "`/myreport` - تقريرك المفصل\n\n"
-        "📋 *عرض سجل معاملاتك:*\n"
-        "`/history`\n\n"
-        "💰 *عرض رصيدك الحالي:*\n"
-        "`/balance`\n\n"
-        "🔄 *تصفير الأرصدة (للمشرفين فقط):*\n"
+        "💰 *عرض الراتب:*\n"
+        "`/S` - عرض راتبك فقط (بالليرة والدولار)\n\n"
+        "📊 *أوامر التقارير:*\n"
+        "`/balance` - عرض رصيدك فقط\n"
+        "`/myreport` - تقريرك المفصل\n"
+        "`/history` - سجل معاملاتك\n"
+        "`/report` - تقرير اليوم للجميع\n\n"
+        "👑 *أوامر المشرفين:*\n"
+        "`/user_report @username` - تقرير موظف محدد\n"
+        "`/all_transactions` - جميع المعاملات\n"
+        "`/salary_rank` - ترتيب الموظفين حسب الراتب\n"
         "`/reset` - تصفير جميع الأرصدة\n"
         "`/reset_user @username` - تصفير رصيد موظف محدد\n"
         "`/reset_confirm` - عرض ملخص قبل التصفير\n"
         "`/archive` - عرض ملفات الأرشيف",
         parse_mode='Markdown'
     )
+
+@bot.message_handler(commands=['S'])
+def salary_only(message):
+    """عرض الراتب فقط للموظف (بالليرة والدولار)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    reset_daily_if_needed()
+    data = load_data()
+    user_id_str = str(message.from_user.id)
+    
+    if user_id_str not in data:
+        bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
+        return
+    
+    user_data = data[user_id_str]
+    
+    salary_sy = user_data["salary_sy"]
+    salary_usd = user_data["salary_usd"]
+    
+    reply = f"💰 *راتب {user_data['username']}*\n\n"
+    
+    # عرض الراتب بالليرة السورية
+    if salary_sy > 0:
+        reply += f"🇸🇾 *{salary_sy}* ل.س\n"
+    else:
+        reply += f"🇸🇾 0 ل.س\n"
+    
+    # عرض الراتب بالدولار
+    if salary_usd > 0:
+        reply += f"💵 *{salary_usd}* USD\n"
+    else:
+        reply += f"💵 0 USD\n"
+    
+    if salary_sy == 0 and salary_usd == 0:
+        reply += "\n📭 لا يوجد راتب مستحق حالياً"
+    else:
+        reply += f"\n📌 الراتب = إجمالي المدفوع × {SALARY_RATE}"
+    
+    bot.reply_to(message, reply, parse_mode='Markdown')
 
 @bot.message_handler(commands=['balance'])
 def balance(message):
@@ -191,22 +228,32 @@ def my_report(message):
         return
     
     reset_daily_if_needed()
-    user_data = get_user_full_report(message.from_user.id)
+    data = load_data()
+    user_id_str = str(message.from_user.id)
     
-    if not user_data:
+    if user_id_str not in data:
         bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
         return
     
-    report = format_balance_report(
-        user_data["username"],
-        user_data["balance_sy"],
-        user_data["balance_usd"],
-        user_data["total_in_sy"],
-        user_data["total_out_sy"],
-        user_data["total_in_usd"],
-        user_data["total_out_usd"],
-        len(user_data["transactions"])
-    )
+    user_data = data[user_id_str]
+    
+    report = f"📊 *تقرير رصيد {user_data['username']}*\n"
+    report += "═" * 20 + "\n\n"
+    
+    report += "🇸🇾 *الليرة السورية:*\n"
+    report += f"   💰 الرصيد: *{user_data['balance_sy']}* ل.س\n"
+    report += f"   📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س\n"
+    report += f"   📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س\n"
+    report += f"   💰 *الراتب: {user_data['salary_sy']}* ل.س\n\n"
+    
+    report += "💵 *الدولار الأمريكي:*\n"
+    report += f"   💰 الرصيد: *{user_data['balance_usd']}* USD\n"
+    report += f"   📥 إجمالي المستلم: {user_data['total_in_usd']} USD\n"
+    report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n"
+    report += f"   💰 *الراتب: {user_data['salary_usd']}* USD\n\n"
+    
+    report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}"
+    report += f"\n\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
     
     bot.reply_to(message, report, parse_mode='Markdown')
 
@@ -257,28 +304,199 @@ def report(message):
     
     sorted_users = sorted(data.items(), key=lambda x: x[1]["balance_sy"] + x[1]["balance_usd"] * 15000, reverse=True)
     
-    report_text = "📊 *تقرير نهاية اليوم*\n"
+    report_text = "📊 *تقرير نهاية اليوم مع الرواتب*\n"
     report_text += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
     report_text += "═" * 20 + "\n\n"
     
     total_balance_sy = 0
     total_balance_usd = 0
+    total_salary_sy = 0
+    total_salary_usd = 0
     
     for user_id, user_data in sorted_users:
         username = user_data["username"]
+        
         report_text += f"👤 *{username}*\n"
         report_text += f"   🇸🇾 رصيد الليرة: *{user_data['balance_sy']}* ل.س\n"
+        report_text += f"   💵 راتب الليرة: *{user_data['salary_sy']}* ل.س\n"
         report_text += f"   💵 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
+        report_text += f"   💵 راتب الدولار: *{user_data['salary_usd']}* USD\n"
         report_text += "─" * 10 + "\n"
         
         total_balance_sy += user_data['balance_sy']
         total_balance_usd += user_data['balance_usd']
+        total_salary_sy += user_data['salary_sy']
+        total_salary_usd += user_data['salary_usd']
     
     report_text += "\n📈 *ملخص عام*\n"
     report_text += f"🇸🇾 إجمالي أرصدة الليرة: {total_balance_sy} ل.س\n"
-    report_text += f"💵 إجمالي أرصدة الدولار: {total_balance_usd} USD"
+    report_text += f"🇸🇾 إجمالي الرواتب (ل.س): *{total_salary_sy}* ل.س\n"
+    report_text += f"💵 إجمالي أرصدة الدولار: {total_balance_usd} USD\n"
+    report_text += f"💵 إجمالي الرواتب (USD): *{total_salary_usd}* USD\n"
+    report_text += f"\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
     
     bot.reply_to(message, report_text, parse_mode='Markdown')
+
+# --------------------- أوامر المشرفين ---------------------
+
+@bot.message_handler(commands=['user_report'])
+def user_report(message):
+    """عرض تقرير مفصل لموظف معين (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ استخدم: `/user_report @username`", parse_mode='Markdown')
+        return
+    
+    target_username = parts[1].replace('@', '')
+    
+    data = load_data()
+    found = False
+    
+    for user_id, user_data in data.items():
+        if user_data["username"].lower() == target_username.lower():
+            report = f"📊 *تقرير الموظف: {user_data['username']}*\n"
+            report += "═" * 25 + "\n\n"
+            
+            report += "🇸🇾 *الليرة السورية:*\n"
+            report += f"   💰 الرصيد: *{user_data['balance_sy']}* ل.س\n"
+            report += f"   📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س\n"
+            report += f"   📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س\n"
+            report += f"   💵 *الراتب: {user_data['salary_sy']}* ل.س\n\n"
+            
+            report += "💵 *الدولار الأمريكي:*\n"
+            report += f"   💰 الرصيد: *{user_data['balance_usd']}* USD\n"
+            report += f"   📥 إجمالي المستلم: {user_data['total_in_usd']} USD\n"
+            report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n"
+            report += f"   💵 *الراتب: {user_data['salary_usd']}* USD\n\n"
+            
+            report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}\n"
+            report += "─" * 15 + "\n\n"
+            
+            if user_data['transactions']:
+                report += "📋 *آخر 5 معاملات:*\n"
+                for trans in reversed(user_data['transactions'][-5:]):
+                    emoji = "📥" if trans["type"] == "استلام" else "📤"
+                    report += f"{emoji} {trans['type']}: *{trans['amount']} {trans['currency']}*\n"
+                    report += f"   🕐 {trans['time']}\n"
+                    if trans.get('note'):
+                        report += f"   📝 {trans['note']}\n"
+            
+            report += f"\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
+            
+            bot.reply_to(message, report, parse_mode='Markdown')
+            found = True
+            break
+    
+    if not found:
+        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+
+@bot.message_handler(commands=['all_transactions'])
+def all_transactions(message):
+    if message.chat.id != GROUP_ID:
+        return
+    
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    data = load_data()
+    if not data:
+        bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
+        return
+    
+    report = "📋 *جميع معاملات اليوم*\n"
+    report += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
+    report += "═" * 20 + "\n\n"
+    
+    for user_id, user_data in data.items():
+        report += f"👤 *{user_data['username']}* ({len(user_data['transactions'])} معاملات)\n"
+        
+        if user_data['transactions']:
+            for trans in user_data['transactions']:
+                emoji = "📥" if trans["type"] == "استلام" else "📤"
+                report += f"   {emoji} {trans['type']}: *{trans['amount']} {trans['currency']}*"
+                report += f" [{trans['time']}]\n"
+                if trans.get('note'):
+                    report += f"      📝 {trans['note']}\n"
+        else:
+            report += "   📭 لا توجد معاملات\n"
+        
+        report += "─" * 10 + "\n"
+    
+    bot.reply_to(message, report, parse_mode='Markdown')
+
+@bot.message_handler(commands=['salary_rank'])
+def salary_rank(message):
+    if message.chat.id != GROUP_ID:
+        return
+    
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    reset_daily_if_needed()
+    data = load_data()
+    
+    if not data:
+        bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
+        return
+    
+    salary_list = []
+    for user_id, user_data in data.items():
+        salary_list.append({
+            "username": user_data["username"],
+            "salary_sy": user_data["salary_sy"],
+            "salary_usd": user_data["salary_usd"],
+            "total_out_sy": user_data["total_out_sy"],
+            "total_out_usd": user_data["total_out_usd"]
+        })
+    
+    salary_list.sort(key=lambda x: x["salary_sy"], reverse=True)
+    
+    report = "🏆 *ترتيب الموظفين حسب الراتب*\n"
+    report += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
+    report += "═" * 20 + "\n\n"
+    
+    rank = 1
+    for emp in salary_list:
+        if emp["salary_sy"] == 0 and emp["salary_usd"] == 0:
+            continue
+        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"{rank}."
+        report += f"{medal} *{emp['username']}*\n"
+        report += f"   📤 إجمالي المدفوع: {emp['total_out_sy']} ل.س\n"
+        report += f"   💵 الراتب (ل.س): *{emp['salary_sy']}* ل.س\n"
+        if emp['salary_usd'] > 0:
+            report += f"   💵 الراتب (USD): {emp['salary_usd']} USD\n"
+        report += "─" * 10 + "\n"
+        rank += 1
+    
+    if rank == 1:
+        bot.reply_to(message, "📭 لا توجد رواتب مسجلة اليوم.")
+    else:
+        report += f"\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
+        bot.reply_to(message, report, parse_mode='Markdown')
 
 # --------------------- أوامر التصفير ---------------------
 
@@ -288,7 +506,6 @@ def reset_balances(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -298,7 +515,6 @@ def reset_balances(message):
         bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
-    # حفظ نسخة احتياطية قبل التصفير
     data = load_data()
     if data:
         backup_file = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -306,7 +522,6 @@ def reset_balances(message):
             json.dump(data, f, ensure_ascii=False, indent=2)
         bot.reply_to(message, f"📦 تم حفظ نسخة احتياطية: `{backup_file}`", parse_mode='Markdown')
     
-    # تصفير البيانات
     save_data({})
     bot.reply_to(message, "🔄 تم تصفير جميع الأرصدة بنجاح.")
 
@@ -316,7 +531,6 @@ def reset_user_balance(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -326,7 +540,6 @@ def reset_user_balance(message):
         bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
-    # استخراج اسم المستخدم من الأمر
     parts = message.text.split()
     if len(parts) < 2:
         bot.reply_to(message, "⚠️ استخدم: `/reset_user @username`", parse_mode='Markdown')
@@ -341,20 +554,29 @@ def reset_user_balance(message):
         if user_data["username"].lower() == target_username.lower():
             old_balance_sy = user_data["balance_sy"]
             old_balance_usd = user_data["balance_usd"]
+            old_salary_sy = user_data["salary_sy"]
+            old_salary_usd = user_data["salary_usd"]
+            
+            # تصفير جميع البيانات
             user_data["balance_sy"] = 0
             user_data["balance_usd"] = 0
             user_data["total_in_sy"] = 0
             user_data["total_out_sy"] = 0
             user_data["total_in_usd"] = 0
             user_data["total_out_usd"] = 0
+            user_data["salary_sy"] = 0
+            user_data["salary_usd"] = 0
             user_data["transactions"] = []
             
             save_data(data)
             found = True
             bot.reply_to(message, 
-                f"✅ تم تصفير رصيد {target_username}\n"
-                f"🇸🇾 كان: {old_balance_sy} ل.س\n"
-                f"💵 كان: {old_balance_usd} USD"
+                f"✅ *تم تصفير رصيد {target_username}*\n\n"
+                f"🇸🇾 كان الرصيد: {old_balance_sy} ل.س\n"
+                f"🇸🇾 كان الراتب: {old_salary_sy} ل.س\n"
+                f"💵 كان الرصيد: {old_balance_usd} USD\n"
+                f"💵 كان الراتب: {old_salary_usd} USD",
+                parse_mode='Markdown'
             )
             break
     
@@ -367,7 +589,6 @@ def reset_confirm(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -377,7 +598,6 @@ def reset_confirm(message):
         bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
-    # استعراض البيانات قبل التصفير
     data = load_data()
     if not data:
         bot.reply_to(message, "📭 لا توجد بيانات لتصفيرها.")
@@ -388,16 +608,24 @@ def reset_confirm(message):
     
     total_balance_sy = 0
     total_balance_usd = 0
+    total_salary_sy = 0
+    total_salary_usd = 0
     
     for user_id, user_data in data.items():
         summary += f"👤 {user_data['username']}:\n"
-        summary += f"   🇸🇾 {user_data['balance_sy']} ل.س\n"
-        summary += f"   💵 {user_data['balance_usd']} USD\n"
+        summary += f"   🇸🇾 الرصيد: {user_data['balance_sy']} ل.س\n"
+        summary += f"   🇸🇾 الراتب: {user_data['salary_sy']} ل.س\n"
+        summary += f"   💵 الرصيد: {user_data['balance_usd']} USD\n"
+        summary += f"   💵 الراتب: {user_data['salary_usd']} USD\n"
         total_balance_sy += user_data['balance_sy']
         total_balance_usd += user_data['balance_usd']
+        total_salary_sy += user_data['salary_sy']
+        total_salary_usd += user_data['salary_usd']
     
     summary += f"\n💰 إجمالي أرصدة الليرة: *{total_balance_sy}* ل.س"
+    summary += f"\n💰 إجمالي رواتب الليرة: *{total_salary_sy}* ل.س"
     summary += f"\n💰 إجمالي أرصدة الدولار: *{total_balance_usd}* USD"
+    summary += f"\n💰 إجمالي رواتب الدولار: *{total_salary_usd}* USD"
     summary += "\n\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد."
     
     bot.reply_to(message, summary, parse_mode='Markdown')
@@ -408,7 +636,6 @@ def show_archive(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -418,7 +645,6 @@ def show_archive(message):
         bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
-    # البحث عن ملفات الأرشيف
     archive_files = [f for f in os.listdir('.') if f.startswith('archive_') and f.endswith('.json')]
     
     if not archive_files:
@@ -449,7 +675,6 @@ def handle_message(message):
     currency = "sy"
     note = ""
     
-    # معالجة الليرة السورية
     if text.startswith('+') or text.startswith('-'):
         try:
             parts = text.split()
@@ -485,7 +710,6 @@ def handle_message(message):
     
     elif '$' in text:
         try:
-            import re
             match = re.search(r'([+-]?\d+\.?\d*)\s*\$', text)
             if match:
                 amount = float(match.group(1))
@@ -502,7 +726,7 @@ def handle_message(message):
         return
     
     try:
-        new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, username = add_transaction(
+        new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, salary, username = add_transaction(
             user.id, username, amount, currency, note
         )
         
@@ -518,18 +742,23 @@ def handle_message(message):
         reply += "📊 *تقريرك السريع:*\n"
         reply += f"📥 إجمالي المستلم اليوم: {total_in} {currency_symbol}\n"
         reply += f"📤 إجمالي المدفوع اليوم: {total_out} {currency_symbol}\n"
+        reply += f"💰 *راتبك الحالي: {salary} {currency_symbol}*\n"
         
         user_data = get_user_full_report(user.id)
         if user_data:
             if currency == "sy":
                 other_balance = user_data["balance_usd"]
                 other_symbol = "💵 USD"
+                other_salary = user_data["salary_usd"]
             else:
                 other_balance = user_data["balance_sy"]
                 other_symbol = "🇸🇾 ل.س"
+                other_salary = user_data["salary_sy"]
             
             if other_balance != 0:
                 reply += f"\n💡 *رصيدك بالعملة الأخرى:* {other_balance} {other_symbol}"
+                if other_salary > 0:
+                    reply += f"\n💡 *راتبك بالعملة الأخرى:* {other_salary} {other_symbol}"
         
         bot.reply_to(message, reply, parse_mode='Markdown')
         
@@ -546,9 +775,10 @@ def run_bot():
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة (مع عرض الرصيد التلقائي)")
+    print("🤖 بوت تتبع الأرصدة (مع الراتب التلقائي)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
+    print(f"💰 نسبة الراتب: {SALARY_RATE * 100}%")
     print("🔄 البوت يعمل...")
     print("=" * 40)
     
