@@ -111,21 +111,14 @@ def add_transaction(user_id, username, amount, currency, note=""):
     
     return new_balance, abs(amount), trans_type, emoji, currency_symbol, total_in, total_out, data[user_id_str]["username"]
 
-# --------------------- دوال عرض التقرير المخصص ---------------------
-
 def get_user_full_report(user_id):
-    """الحصول على تقرير كامل للمستخدم"""
     data = load_data()
     user_id_str = str(user_id)
-    
     if user_id_str not in data:
         return None
-    
-    user_data = data[user_id_str]
-    return user_data
+    return data[user_id_str]
 
 def format_balance_report(username, balance_sy, balance_usd, total_in_sy, total_out_sy, total_in_usd, total_out_usd, transactions_count):
-    """تنسيق تقرير الرصيد بشكل جميل"""
     report = f"📊 *تقرير رصيد {username}*\n"
     report += "═" * 20 + "\n\n"
     
@@ -143,7 +136,7 @@ def format_balance_report(username, balance_sy, balance_usd, total_in_sy, total_
     
     return report
 
-# --------------------- أوامر البوت ---------------------
+# --------------------- أوامر البوت الأساسية ---------------------
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -163,13 +156,17 @@ def start(message):
         "📋 *عرض سجل معاملاتك:*\n"
         "`/history`\n\n"
         "💰 *عرض رصيدك الحالي:*\n"
-        "`/balance`",
+        "`/balance`\n\n"
+        "🔄 *تصفير الأرصدة (للمشرفين فقط):*\n"
+        "`/reset` - تصفير جميع الأرصدة\n"
+        "`/reset_user @username` - تصفير رصيد موظف محدد\n"
+        "`/reset_confirm` - عرض ملخص قبل التصفير\n"
+        "`/archive` - عرض ملفات الأرشيف",
         parse_mode='Markdown'
     )
 
 @bot.message_handler(commands=['balance'])
 def balance(message):
-    """عرض الرصيد فقط"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -190,7 +187,6 @@ def balance(message):
 
 @bot.message_handler(commands=['myreport'])
 def my_report(message):
-    """عرض تقرير مفصل للمستخدم نفسه"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -284,6 +280,162 @@ def report(message):
     
     bot.reply_to(message, report_text, parse_mode='Markdown')
 
+# --------------------- أوامر التصفير ---------------------
+
+@bot.message_handler(commands=['reset'])
+def reset_balances(message):
+    """تصفير جميع الأرصدة (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    # حفظ نسخة احتياطية قبل التصفير
+    data = load_data()
+    if data:
+        backup_file = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(backup_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        bot.reply_to(message, f"📦 تم حفظ نسخة احتياطية: `{backup_file}`", parse_mode='Markdown')
+    
+    # تصفير البيانات
+    save_data({})
+    bot.reply_to(message, "🔄 تم تصفير جميع الأرصدة بنجاح.")
+
+@bot.message_handler(commands=['reset_user'])
+def reset_user_balance(message):
+    """تصفير رصيد موظف معين (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    # استخراج اسم المستخدم من الأمر
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ استخدم: `/reset_user @username`", parse_mode='Markdown')
+        return
+    
+    target_username = parts[1].replace('@', '')
+    
+    data = load_data()
+    found = False
+    
+    for user_id, user_data in data.items():
+        if user_data["username"].lower() == target_username.lower():
+            old_balance_sy = user_data["balance_sy"]
+            old_balance_usd = user_data["balance_usd"]
+            user_data["balance_sy"] = 0
+            user_data["balance_usd"] = 0
+            user_data["total_in_sy"] = 0
+            user_data["total_out_sy"] = 0
+            user_data["total_in_usd"] = 0
+            user_data["total_out_usd"] = 0
+            user_data["transactions"] = []
+            
+            save_data(data)
+            found = True
+            bot.reply_to(message, 
+                f"✅ تم تصفير رصيد {target_username}\n"
+                f"🇸🇾 كان: {old_balance_sy} ل.س\n"
+                f"💵 كان: {old_balance_usd} USD"
+            )
+            break
+    
+    if not found:
+        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+
+@bot.message_handler(commands=['reset_confirm'])
+def reset_confirm(message):
+    """تأكيد تصفير جميع الأرصدة (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    # استعراض البيانات قبل التصفير
+    data = load_data()
+    if not data:
+        bot.reply_to(message, "📭 لا توجد بيانات لتصفيرها.")
+        return
+    
+    summary = "📊 *ملخص البيانات قبل التصفير*\n"
+    summary += "═" * 15 + "\n\n"
+    
+    total_balance_sy = 0
+    total_balance_usd = 0
+    
+    for user_id, user_data in data.items():
+        summary += f"👤 {user_data['username']}:\n"
+        summary += f"   🇸🇾 {user_data['balance_sy']} ل.س\n"
+        summary += f"   💵 {user_data['balance_usd']} USD\n"
+        total_balance_sy += user_data['balance_sy']
+        total_balance_usd += user_data['balance_usd']
+    
+    summary += f"\n💰 إجمالي أرصدة الليرة: *{total_balance_sy}* ل.س"
+    summary += f"\n💰 إجمالي أرصدة الدولار: *{total_balance_usd}* USD"
+    summary += "\n\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد."
+    
+    bot.reply_to(message, summary, parse_mode='Markdown')
+
+@bot.message_handler(commands=['archive'])
+def show_archive(message):
+    """عرض ملفات الأرشيف المتاحة (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    # البحث عن ملفات الأرشيف
+    archive_files = [f for f in os.listdir('.') if f.startswith('archive_') and f.endswith('.json')]
+    
+    if not archive_files:
+        bot.reply_to(message, "📭 لا توجد ملفات أرشيف.")
+        return
+    
+    files_text = "📁 *ملفات الأرشيف المتاحة*\n"
+    files_text += "═" * 15 + "\n\n"
+    
+    for file in sorted(archive_files, reverse=True):
+        size = os.path.getsize(file) / 1024
+        files_text += f"📄 `{file}` ({size:.1f} KB)\n"
+    
+    bot.reply_to(message, files_text, parse_mode='Markdown')
+
+# --------------------- معالجة الرسائل النصية ---------------------
+
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     if message.chat.id != GROUP_ID:
@@ -354,7 +506,6 @@ def handle_message(message):
             user.id, username, amount, currency, note
         )
         
-        # بناء رسالة التأكيد مع التقرير
         reply = f"{emoji} *تم تسجيل العملية بنجاح*\n\n"
         reply += f"👤 {username}\n"
         reply += f"📌 {trans_type}: *{trans_amount} {currency_symbol}*\n"
@@ -368,7 +519,6 @@ def handle_message(message):
         reply += f"📥 إجمالي المستلم اليوم: {total_in} {currency_symbol}\n"
         reply += f"📤 إجمالي المدفوع اليوم: {total_out} {currency_symbol}\n"
         
-        # عرض تقرير كامل مع العملتين إذا كان المستخدم لديه رصيد في العملة الأخرى
         user_data = get_user_full_report(user.id)
         if user_data:
             if currency == "sy":
