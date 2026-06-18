@@ -14,7 +14,7 @@ DATA_FILE = "data.json"
 # إنشاء البوت
 bot = telebot.TeleBot(TOKEN)
 
-# إنشاء تطبيق Flask لاستقبال طلبات UptimeRobot
+# إنشاء تطبيق Flask
 app = Flask(__name__)
 
 @app.route('/')
@@ -71,7 +71,6 @@ def add_transaction(user_id, username, amount, currency, note=""):
         }
     
     if currency == "sy":
-        currency_symbol = "🇸🇾 ل.س"
         if amount > 0:
             data[user_id_str]["balance_sy"] += amount
             data[user_id_str]["total_in_sy"] += amount
@@ -79,7 +78,6 @@ def add_transaction(user_id, username, amount, currency, note=""):
             data[user_id_str]["balance_sy"] += amount
             data[user_id_str]["total_out_sy"] += abs(amount)
     else:
-        currency_symbol = "💵 USD"
         if amount > 0:
             data[user_id_str]["balance_usd"] += amount
             data[user_id_str]["total_in_usd"] += amount
@@ -93,7 +91,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
     data[user_id_str]["transactions"].append({
         "type": trans_type,
         "amount": abs(amount),
-        "currency": currency_symbol,
+        "currency": "🇸🇾 ل.س" if currency == "sy" else "💵 USD",
         "time": datetime.now().strftime("%H:%M:%S"),
         "note": note
     })
@@ -102,12 +100,51 @@ def add_transaction(user_id, username, amount, currency, note=""):
     
     if currency == "sy":
         new_balance = data[user_id_str]["balance_sy"]
+        total_in = data[user_id_str]["total_in_sy"]
+        total_out = data[user_id_str]["total_out_sy"]
+        currency_symbol = "🇸🇾 ل.س"
     else:
         new_balance = data[user_id_str]["balance_usd"]
+        total_in = data[user_id_str]["total_in_usd"]
+        total_out = data[user_id_str]["total_out_usd"]
+        currency_symbol = "💵 USD"
     
-    return new_balance, abs(amount), trans_type, emoji, currency_symbol
+    return new_balance, abs(amount), trans_type, emoji, currency_symbol, total_in, total_out, data[user_id_str]["username"]
+
+# --------------------- دوال عرض التقرير المخصص ---------------------
+
+def get_user_full_report(user_id):
+    """الحصول على تقرير كامل للمستخدم"""
+    data = load_data()
+    user_id_str = str(user_id)
+    
+    if user_id_str not in data:
+        return None
+    
+    user_data = data[user_id_str]
+    return user_data
+
+def format_balance_report(username, balance_sy, balance_usd, total_in_sy, total_out_sy, total_in_usd, total_out_usd, transactions_count):
+    """تنسيق تقرير الرصيد بشكل جميل"""
+    report = f"📊 *تقرير رصيد {username}*\n"
+    report += "═" * 20 + "\n\n"
+    
+    report += "🇸🇾 *الليرة السورية:*\n"
+    report += f"   💰 الرصيد: *{balance_sy}* ل.س\n"
+    report += f"   📥 إجمالي المستلم: {total_in_sy} ل.س\n"
+    report += f"   📤 إجمالي المدفوع: {total_out_sy} ل.س\n\n"
+    
+    report += "💵 *الدولار الأمريكي:*\n"
+    report += f"   💰 الرصيد: *{balance_usd}* USD\n"
+    report += f"   📥 إجمالي المستلم: {total_in_usd} USD\n"
+    report += f"   📤 إجمالي المدفوع: {total_out_usd} USD\n\n"
+    
+    report += f"📝 عدد المعاملات اليوم: {transactions_count}"
+    
+    return report
 
 # --------------------- أوامر البوت ---------------------
+
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message, 
@@ -120,8 +157,9 @@ def start(message):
         "`+100$` أو `استلام 100 دولار`\n\n"
         "📌 *لخصم مبلغ مدفوع بالدولار:*\n"
         "`-50$` أو `دفع 50 دولار`\n\n"
-        "📊 *عرض تقرير اليوم:*\n"
-        "`/report`\n\n"
+        "📊 *عرض تقرير مفصل:*\n"
+        "`/report` - تقرير اليوم للجميع\n"
+        "`/myreport` - تقريرك المفصل\n\n"
         "📋 *عرض سجل معاملاتك:*\n"
         "`/history`\n\n"
         "💰 *عرض رصيدك الحالي:*\n"
@@ -131,6 +169,7 @@ def start(message):
 
 @bot.message_handler(commands=['balance'])
 def balance(message):
+    """عرض الرصيد فقط"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -142,16 +181,38 @@ def balance(message):
         user_data = data[user_id_str]
         bot.reply_to(message,
             f"👤 *{user_data['username']}*\n\n"
-            f"🇸🇾 *رصيد الليرة السورية:* {user_data['balance_sy']} ل.س\n"
-            f"📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س\n"
-            f"📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س\n\n"
-            f"💵 *رصيد الدولار:* {user_data['balance_usd']} USD\n"
-            f"📥 إجمالي المستلم: {user_data['total_in_usd']} USD\n"
-            f"📤 إجمالي المدفوع: {user_data['total_out_usd']} USD",
+            f"🇸🇾 *رصيد الليرة:* {user_data['balance_sy']} ل.س\n"
+            f"💵 *رصيد الدولار:* {user_data['balance_usd']} USD",
             parse_mode='Markdown'
         )
     else:
         bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
+
+@bot.message_handler(commands=['myreport'])
+def my_report(message):
+    """عرض تقرير مفصل للمستخدم نفسه"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    reset_daily_if_needed()
+    user_data = get_user_full_report(message.from_user.id)
+    
+    if not user_data:
+        bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
+        return
+    
+    report = format_balance_report(
+        user_data["username"],
+        user_data["balance_sy"],
+        user_data["balance_usd"],
+        user_data["total_in_sy"],
+        user_data["total_out_sy"],
+        user_data["total_in_usd"],
+        user_data["total_out_usd"],
+        len(user_data["transactions"])
+    )
+    
+    bot.reply_to(message, report, parse_mode='Markdown')
 
 @bot.message_handler(commands=['history'])
 def history(message):
@@ -206,37 +267,20 @@ def report(message):
     
     total_balance_sy = 0
     total_balance_usd = 0
-    total_in_sy = 0
-    total_out_sy = 0
-    total_in_usd = 0
-    total_out_usd = 0
     
     for user_id, user_data in sorted_users:
         username = user_data["username"]
         report_text += f"👤 *{username}*\n"
-        report_text += f"🇸🇾 رصيد الليرة: *{user_data['balance_sy']}* ل.س\n"
-        report_text += f"💵 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
-        report_text += f"📥 إجمالي المستلم (ل.س): {user_data['total_in_sy']}\n"
-        report_text += f"📤 إجمالي المدفوع (ل.س): {user_data['total_out_sy']}\n"
-        report_text += f"📥 إجمالي المستلم (USD): {user_data['total_in_usd']}\n"
-        report_text += f"📤 إجمالي المدفوع (USD): {user_data['total_out_usd']}\n"
-        report_text += f"📝 عدد المعاملات: {len(user_data['transactions'])}\n"
-        report_text += "─" * 15 + "\n"
+        report_text += f"   🇸🇾 رصيد الليرة: *{user_data['balance_sy']}* ل.س\n"
+        report_text += f"   💵 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
+        report_text += "─" * 10 + "\n"
         
         total_balance_sy += user_data['balance_sy']
         total_balance_usd += user_data['balance_usd']
-        total_in_sy += user_data['total_in_sy']
-        total_out_sy += user_data['total_out_sy']
-        total_in_usd += user_data['total_in_usd']
-        total_out_usd += user_data['total_out_usd']
     
     report_text += "\n📈 *ملخص عام*\n"
     report_text += f"🇸🇾 إجمالي أرصدة الليرة: {total_balance_sy} ل.س\n"
-    report_text += f"💵 إجمالي أرصدة الدولار: {total_balance_usd} USD\n"
-    report_text += f"📥 إجمالي الإيداعات (ل.س): {total_in_sy}\n"
-    report_text += f"📤 إجمالي السحوبات (ل.س): {total_out_sy}\n"
-    report_text += f"📥 إجمالي الإيداعات (USD): {total_in_usd}\n"
-    report_text += f"📤 إجمالي السحوبات (USD): {total_out_usd}\n"
+    report_text += f"💵 إجمالي أرصدة الدولار: {total_balance_usd} USD"
     
     bot.reply_to(message, report_text, parse_mode='Markdown')
 
@@ -306,28 +350,45 @@ def handle_message(message):
         return
     
     try:
-        new_balance, trans_amount, trans_type, emoji, currency_symbol = add_transaction(
+        new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, username = add_transaction(
             user.id, username, amount, currency, note
         )
         
-        reply = (
-            f"{emoji} *تم تسجيل العملية*\n\n"
-            f"👤 {username}\n"
-            f"📌 {trans_type}: *{trans_amount} {currency_symbol}*\n"
-            f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*\n"
-        )
+        # بناء رسالة التأكيد مع التقرير
+        reply = f"{emoji} *تم تسجيل العملية بنجاح*\n\n"
+        reply += f"👤 {username}\n"
+        reply += f"📌 {trans_type}: *{trans_amount} {currency_symbol}*\n"
+        reply += f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*\n"
+        
         if note:
             reply += f"📝 ملاحظة: {note}\n"
+        
+        reply += "\n" + "─" * 15 + "\n"
+        reply += "📊 *تقريرك السريع:*\n"
+        reply += f"📥 إجمالي المستلم اليوم: {total_in} {currency_symbol}\n"
+        reply += f"📤 إجمالي المدفوع اليوم: {total_out} {currency_symbol}\n"
+        
+        # عرض تقرير كامل مع العملتين إذا كان المستخدم لديه رصيد في العملة الأخرى
+        user_data = get_user_full_report(user.id)
+        if user_data:
+            if currency == "sy":
+                other_balance = user_data["balance_usd"]
+                other_symbol = "💵 USD"
+            else:
+                other_balance = user_data["balance_sy"]
+                other_symbol = "🇸🇾 ل.س"
+            
+            if other_balance != 0:
+                reply += f"\n💡 *رصيدك بالعملة الأخرى:* {other_balance} {other_symbol}"
         
         bot.reply_to(message, reply, parse_mode='Markdown')
         
     except Exception as e:
         bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
 
-# --------------------- تشغيل البوت مع Flask ---------------------
+# --------------------- تشغيل البوت ---------------------
 
 def run_bot():
-    """تشغيل البوت في خيط منفصل"""
     try:
         bot.infinity_polling()
     except Exception as e:
@@ -335,16 +396,14 @@ def run_bot():
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة (مع Flask)")
+    print("🤖 بوت تتبع الأرصدة (مع عرض الرصيد التلقائي)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print("🔄 البوت يعمل...")
     print("=" * 40)
     
-    # تشغيل البوت في خيط منفصل
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # تشغيل خادم Flask
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
