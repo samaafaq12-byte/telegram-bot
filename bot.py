@@ -764,24 +764,30 @@ def handle_message(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
 
-# --------------------- إبقاء البوت نشطاً ---------------------
+# --------------------- إبقاء البوت نشطاً (Keep-Alive) ---------------------
 
 def keep_alive():
-    """إبقاء البوت نشطاً عن طريق إرسال طلب إلى نفسه"""
+    """إبقاء البوت نشطاً عن طريق إرسال طلب إلى نفسه كل 5 دقائق"""
+    url = "https://telegram-bot-kpt5.onrender.com"
     while True:
         try:
-            requests.get("https://telegram-bot-kpt5.onrender.com")
-        except:
-            pass
-        time.sleep(600)  # كل 10 دقائق
+            response = requests.get(url, timeout=10)
+            print(f"✅ تم إرسال طلب Keep-Alive إلى {url} - الحالة: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ خطأ في Keep-Alive: {e}")
+        time.sleep(300)  # 5 دقائق
 
 # --------------------- تشغيل البوت ---------------------
 
 def run_bot():
     try:
-        bot.infinity_polling()
+        print("🤖 بدء تشغيل البوت...")
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
     except Exception as e:
         print(f"❌ خطأ في البوت: {e}")
+        time.sleep(5)
+        # إعادة تشغيل البوت إذا توقف
+        run_bot()
 
 if __name__ == "__main__":
     print("=" * 40)
@@ -792,9 +798,10 @@ if __name__ == "__main__":
     print("🔄 البوت يعمل...")
     print("=" * 40)
     
-    # بدء خيط الإبقاء على النشاط
+    # بدء خيط الإبقاء على النشاط (Keep-Alive)
     keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
     keep_alive_thread.start()
+    print("✅ تم بدء Keep-Alive (كل 5 دقائق)")
     
     # بدء البوت
     bot_thread = threading.Thread(target=run_bot, daemon=True)
