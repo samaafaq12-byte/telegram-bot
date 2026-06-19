@@ -6,12 +6,14 @@ from datetime import datetime
 from flask import Flask
 import threading
 import re
+import requests
+import time
 
 # --------------------- الإعدادات ---------------------
 TOKEN = "8952384966:AAH6509zEqo73asesJRBzPutsuyqD-eZqzM"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
-SALARY_RATE = 0.005  # نسبة الراتب
+SALARY_RATE = 0.005  # نسبة الراتب (0.5%)
 
 # إنشاء البوت
 bot = telebot.TeleBot(TOKEN)
@@ -183,13 +185,11 @@ def salary_only(message):
     
     reply = f"💰 *راتب {user_data['username']}*\n\n"
     
-    # عرض الراتب بالليرة السورية
     if salary_sy > 0:
         reply += f"🇸🇾 *{salary_sy}* ل.س\n"
     else:
         reply += f"🇸🇾 0 ل.س\n"
     
-    # عرض الراتب بالدولار
     if salary_usd > 0:
         reply += f"💵 *{salary_usd}* USD\n"
     else:
@@ -557,7 +557,6 @@ def reset_user_balance(message):
             old_salary_sy = user_data["salary_sy"]
             old_salary_usd = user_data["salary_usd"]
             
-            # تصفير جميع البيانات
             user_data["balance_sy"] = 0
             user_data["balance_usd"] = 0
             user_data["total_in_sy"] = 0
@@ -765,6 +764,17 @@ def handle_message(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
 
+# --------------------- إبقاء البوت نشطاً ---------------------
+
+def keep_alive():
+    """إبقاء البوت نشطاً عن طريق إرسال طلب إلى نفسه"""
+    while True:
+        try:
+            requests.get("https://telegram-bot-kpt5.onrender.com")
+        except:
+            pass
+        time.sleep(600)  # كل 10 دقائق
+
 # --------------------- تشغيل البوت ---------------------
 
 def run_bot():
@@ -782,8 +792,14 @@ if __name__ == "__main__":
     print("🔄 البوت يعمل...")
     print("=" * 40)
     
+    # بدء خيط الإبقاء على النشاط
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+    
+    # بدء البوت
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
+    # تشغيل Flask
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
