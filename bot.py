@@ -10,7 +10,7 @@ import requests
 import time
 
 # --------------------- الإعدادات ---------------------
-TOKEN = "8952384966:AAH6509zEqo73asesJRBzPutsuyqD-eZqzM"
+TOKEN = "7767628116:AAFmvBu-VtwGpFqrdUWsXbhlhYY8HAig4ug"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
 SALARY_RATE = 0.005  # نسبة الراتب (0.5%)
