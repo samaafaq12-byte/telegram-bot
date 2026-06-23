@@ -191,8 +191,8 @@ def start(message):
         "`/user_report @username` - تقرير موظف محدد\n"
         "`/all_transactions` - جميع المعاملات\n"
         "`/salary_rank` - ترتيب الموظفين حسب الراتب\n"
-        "`/reset` - تصفير جميع الأرصدة\n"
-        "`/reset_user @username` - تصفير رصيد موظف محدد\n"
+        "`/reset` - تصفير الأرصدة (مع الاحتفاظ بالأكواد)\n"
+        "`/reset_user @username` - تصفير رصيد موظف (مع الاحتفاظ بالكود)\n"
         "`/reset_confirm` - عرض ملخص قبل التصفير\n"
         "`/archive` - عرض ملفات الأرشيف",
         parse_mode='Markdown'
@@ -744,10 +744,11 @@ def salary_rank(message):
         report += f"\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
         bot.reply_to(message, report, parse_mode='Markdown')
 
-# --------------------- أوامر التصفير ---------------------
+# --------------------- أوامر التصفير (مع الاحتفاظ بالأكواد) ---------------------
 
 @bot.message_handler(commands=['reset'])
 def reset_balances(message):
+    """تصفير جميع الأرصدة مع الاحتفاظ بأكواد الاستقبال (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -761,17 +762,41 @@ def reset_balances(message):
         return
     
     data = load_data()
+    
+    # حفظ نسخة احتياطية قبل التصفير
     if data:
         backup_file = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(backup_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         bot.reply_to(message, f"📦 تم حفظ نسخة احتياطية: `{backup_file}`", parse_mode='Markdown')
     
-    save_data({})
-    bot.reply_to(message, "🔄 تم تصفير جميع الأرصدة بنجاح.")
+    # تصفير الأرصدة مع الاحتفاظ بالأكواد
+    for user_id, user_data in data.items():
+        user_data["balance_sy"] = 0
+        user_data["balance_usd"] = 0
+        user_data["total_in_sy"] = 0
+        user_data["total_out_sy"] = 0
+        user_data["total_in_usd"] = 0
+        user_data["total_out_usd"] = 0
+        user_data["salary_sy"] = 0
+        user_data["salary_usd"] = 0
+        user_data["transactions"] = []
+        # ✅ payment_code لا يتم حذفه!
+    
+    save_data(data)
+    
+    # عرض عدد الأكواد المحفوظة
+    codes_count = sum(1 for u in data.values() if u.get("payment_code", ""))
+    
+    bot.reply_to(message, 
+        f"🔄 تم تصفير جميع الأرصدة بنجاح.\n"
+        f"🔑 عدد الأكواد المحفوظة: {codes_count}",
+        parse_mode='Markdown'
+    )
 
 @bot.message_handler(commands=['reset_user'])
 def reset_user_balance(message):
+    """تصفير رصيد موظف معين مع الاحتفاظ بالكود (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -796,6 +821,10 @@ def reset_user_balance(message):
     
     for user_id, user_data in data.items():
         if user_data["username"].lower() == target_username.lower():
+            # حفظ الكود قبل التصفير
+            payment_code = user_data.get("payment_code", "")
+            
+            # تصفير الأرصدة فقط
             user_data["balance_sy"] = 0
             user_data["balance_usd"] = 0
             user_data["total_in_sy"] = 0
@@ -805,10 +834,19 @@ def reset_user_balance(message):
             user_data["salary_sy"] = 0
             user_data["salary_usd"] = 0
             user_data["transactions"] = []
+            # ✅ payment_code لا يتم حذفه!
             
             save_data(data)
             found = True
-            bot.reply_to(message, f"✅ تم تصفير رصيد {target_username}")
+            
+            if payment_code:
+                bot.reply_to(message, 
+                    f"✅ *تم تصفير رصيد {target_username}*\n"
+                    f"🔑 الكود المحفوظ: `{payment_code}`",
+                    parse_mode='Markdown'
+                )
+            else:
+                bot.reply_to(message, f"✅ تم تصفير رصيد {target_username}")
             break
     
     if not found:
@@ -816,6 +854,7 @@ def reset_user_balance(message):
 
 @bot.message_handler(commands=['reset_confirm'])
 def reset_confirm(message):
+    """تأكيد تصفير جميع الأرصدة (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -836,14 +875,34 @@ def reset_confirm(message):
     summary = "📊 *ملخص البيانات قبل التصفير*\n"
     summary += "═" * 15 + "\n\n"
     
+    total_balance_sy = 0
+    total_balance_usd = 0
+    total_salary_sy = 0
+    total_salary_usd = 0
+    codes_count = 0
+    
     for user_id, user_data in data.items():
         summary += f"👤 {user_data['username']}:\n"
         summary += f"   🇸🇾 الرصيد: {user_data['balance_sy']} ل.س\n"
         summary += f"   🇸🇾 الراتب: {user_data['salary_sy']} ل.س\n"
         summary += f"   💵 الرصيد: {user_data['balance_usd']} USD\n"
         summary += f"   💵 الراتب: {user_data['salary_usd']} USD\n"
+        if user_data.get("payment_code", ""):
+            summary += f"   🔑 كود: `{user_data['payment_code']}`\n"
+            codes_count += 1
+        
+        total_balance_sy += user_data['balance_sy']
+        total_balance_usd += user_data['balance_usd']
+        total_salary_sy += user_data['salary_sy']
+        total_salary_usd += user_data['salary_usd']
     
-    summary += "\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد."
+    summary += f"\n💰 إجمالي أرصدة الليرة: *{total_balance_sy}* ل.س"
+    summary += f"\n💰 إجمالي رواتب الليرة: *{total_salary_sy}* ل.س"
+    summary += f"\n💰 إجمالي أرصدة الدولار: *{total_balance_usd}* USD"
+    summary += f"\n💰 إجمالي رواتب الدولار: *{total_salary_usd}* USD"
+    summary += f"\n🔑 عدد الأكواد المحفوظة: *{codes_count}*"
+    summary += "\n\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد.\n"
+    summary += "📌 ملاحظة: الأكواد المسجلة **لن يتم حذفها** عند التصفير."
     
     bot.reply_to(message, summary, parse_mode='Markdown')
 
@@ -1006,15 +1065,16 @@ def handle_message(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
 
-# --------------------- تشغيل البوت مع الإبقاء على النشاط وإعادة التشغيل التلقائي ---------------------
+# --------------------- تشغيل البوت ---------------------
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة والرواتب (مع تشغيل مستمر)")
+    print("🤖 بوت تتبع الأرصدة والرواتب (مع تشغيل مستمر وحفظ الأكواد)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print(f"💰 نسبة الراتب: {SALARY_RATE * 100}%")
     print("🔄 البوت يعمل مع إعادة تشغيل تلقائي...")
+    print("🔑 الأكواد محفوظة ولا تُحذف عند التصفير")
     print("=" * 40)
     
     # تشغيل خيط الإبقاء على النشاط
