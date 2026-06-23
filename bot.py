@@ -6,14 +6,12 @@ from datetime import datetime
 from flask import Flask
 import threading
 import re
-import requests
-import time
 
 # --------------------- الإعدادات ---------------------
-TOKEN = "7767628116:AAFmvBu-VtwGpFqrdUWsXbhlhYY8HAig4ug"
+TOKEN = "8736403186:AAGgWCc9VpFNwkPbj-usX7QaIhK4wmthXGg"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
-SALARY_RATE = 0.005  # نسبة الراتب (0.5%)
+SALARY_RATE = 0.005  # نسبة الراتب
 
 # إنشاء البوت
 bot = telebot.TeleBot(TOKEN)
@@ -77,6 +75,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
             "total_out_usd": 0,
             "salary_sy": 0,
             "salary_usd": 0,
+            "payment_link": "",  # رابط استقبال الراتب
             "transactions": []
         }
     
@@ -137,7 +136,7 @@ def get_user_full_report(user_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message, 
-        "👋 *مرحباً! أنا بوت تتبع الأرصدة*\n\n"
+        "👋 *مرحباً! أنا بوت تتبع الأرصدة والرواتب*\n\n"
         "📌 *لإضافة مبلغ مستلم بالليرة السورية:*\n"
         "`+1000` أو `استلام 1000`\n\n"
         "📌 *لخصم مبلغ مدفوع بالليرة السورية:*\n"
@@ -146,8 +145,14 @@ def start(message):
         "`+100$` أو `استلام 100 دولار`\n\n"
         "📌 *لخصم مبلغ مدفوع بالدولار:*\n"
         "`-50$` أو `دفع 50 دولار`\n\n"
+        "🔗 *روابط استقبال الراتب:*\n"
+        "`/setlink @موظف الرابط` - تعيين رابط استقبال لموظف (للمشرفين)\n"
+        "`/dellink @موظف` - حذف رابط استقبال موظف (للمشرفين)\n"
+        "`/link @موظف` - عرض رابط استقبال الموظف\n"
+        "`/mylink` - عرض رابط استقبالك أنت\n"
+        "`/listlinks` - عرض جميع الروابط المسجلة (للمشرفين)\n\n"
         "💰 *عرض الراتب:*\n"
-        "`/S` - عرض راتبك فقط (بالليرة والدولار)\n\n"
+        "`/S` - عرض راتبك فقط\n\n"
         "📊 *أوامر التقارير:*\n"
         "`/balance` - عرض رصيدك فقط\n"
         "`/myreport` - تقريرك المفصل\n"
@@ -164,9 +169,204 @@ def start(message):
         parse_mode='Markdown'
     )
 
+# --------------------- أوامر روابط استقبال الراتب ---------------------
+
+@bot.message_handler(commands=['setlink'])
+def set_payment_link(message):
+    """تعيين رابط استقبال الراتب لموظف (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    # استخراج البيانات من الأمر
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        bot.reply_to(message, "⚠️ استخدم: `/setlink @موظف الرابط`", parse_mode='Markdown')
+        return
+    
+    target_username = parts[1].replace('@', '')
+    payment_link = parts[2].strip()
+    
+    # التحقق من صحة الرابط
+    if not payment_link.startswith('http://') and not payment_link.startswith('https://'):
+        bot.reply_to(message, "⚠️ الرابط يجب أن يبدأ بـ http:// أو https://")
+        return
+    
+    data = load_data()
+    found = False
+    
+    for user_id, user_data in data.items():
+        if user_data["username"].lower() == target_username.lower():
+            user_data["payment_link"] = payment_link
+            save_data(data)
+            found = True
+            bot.reply_to(message, 
+                f"✅ *تم تعيين رابط استقبال الراتب لـ {target_username}*\n\n"
+                f"🔗 {payment_link}",
+                parse_mode='Markdown'
+            )
+            break
+    
+    if not found:
+        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}\n\n💡 تأكد من أن الموظف قام بعملية مبلغ واحدة على الأقل (+1000 أو -500).")
+
+@bot.message_handler(commands=['dellink'])
+def delete_payment_link(message):
+    """حذف رابط استقبال الراتب لموظف (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ استخدم: `/dellink @موظف`", parse_mode='Markdown')
+        return
+    
+    target_username = parts[1].replace('@', '')
+    
+    data = load_data()
+    found = False
+    
+    for user_id, user_data in data.items():
+        if user_data["username"].lower() == target_username.lower():
+            user_data["payment_link"] = ""
+            save_data(data)
+            found = True
+            bot.reply_to(message, f"🗑️ تم حذف رابط استقبال {target_username}")
+            break
+    
+    if not found:
+        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+
+@bot.message_handler(commands=['link'])
+def get_payment_link(message):
+    """عرض رابط استقبال الراتب لموظف"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ استخدم: `/link @موظف`", parse_mode='Markdown')
+        return
+    
+    target_username = parts[1].replace('@', '')
+    
+    data = load_data()
+    found = False
+    
+    for user_id, user_data in data.items():
+        if user_data["username"].lower() == target_username.lower():
+            found = True
+            payment_link = user_data.get("payment_link", "")
+            
+            if payment_link:
+                bot.reply_to(message,
+                    f"🔗 *رابط استقبال الراتب لـ {target_username}*\n\n"
+                    f"{payment_link}",
+                    parse_mode='Markdown'
+                )
+            else:
+                bot.reply_to(message, f"📭 لا يوجد رابط استقبال مسجل لـ {target_username}")
+            break
+    
+    if not found:
+        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+
+@bot.message_handler(commands=['mylink'])
+def my_payment_link(message):
+    """عرض رابط استقبال الراتب الخاص بي"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    data = load_data()
+    user_id_str = str(message.from_user.id)
+    
+    if user_id_str not in data:
+        bot.reply_to(message, "📭 لا توجد بيانات لك. قم بأول عملية مبلغ (+1000 أو -500) أولاً.")
+        return
+    
+    user_data = data[user_id_str]
+    payment_link = user_data.get("payment_link", "")
+    
+    if payment_link:
+        bot.reply_to(message,
+            f"🔗 *رابط استقبال الراتب الخاص بك*\n\n"
+            f"{payment_link}",
+            parse_mode='Markdown'
+        )
+    else:
+        bot.reply_to(message, 
+            "📭 لا يوجد رابط استقبال مسجل لك.\n\n"
+            "💡 اطلب من المشرف تعيين رابط لك باستخدام:\n"
+            "`/setlink @اسمك الرابط`",
+            parse_mode='Markdown'
+        )
+
+@bot.message_handler(commands=['listlinks'])
+def list_all_links(message):
+    """عرض جميع الروابط المسجلة (للمشرفين فقط)"""
+    if message.chat.id != GROUP_ID:
+        return
+    
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
+        return
+    
+    data = load_data()
+    
+    # تجميع الروابط الموجودة فقط
+    links_list = []
+    for user_id, user_data in data.items():
+        payment_link = user_data.get("payment_link", "")
+        if payment_link:
+            links_list.append({
+                "username": user_data["username"],
+                "link": payment_link
+            })
+    
+    if not links_list:
+        bot.reply_to(message, "📭 لا توجد روابط مسجلة.")
+        return
+    
+    report = "📋 *قائمة روابط استقبال الراتب*\n"
+    report += "═" * 20 + "\n\n"
+    
+    for item in links_list:
+        report += f"👤 *{item['username']}*\n"
+        report += f"🔗 {item['link']}\n"
+        report += "─" * 15 + "\n"
+    
+    bot.reply_to(message, report, parse_mode='Markdown')
+
+# --------------------- أوامر الرواتب والتقارير ---------------------
+
 @bot.message_handler(commands=['S'])
 def salary_only(message):
-    """عرض الراتب فقط للموظف (بالليرة والدولار)"""
+    """عرض الراتب فقط للموظف"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -199,6 +399,11 @@ def salary_only(message):
         reply += "\n📭 لا يوجد راتب مستحق حالياً"
     else:
         reply += f"\n📌 الراتب = إجمالي المدفوع × {SALARY_RATE}"
+    
+    # عرض رابط استقبال الراتب
+    payment_link = user_data.get("payment_link", "")
+    if payment_link:
+        reply += f"\n\n🔗 *رابط استقبال الراتب:*\n{payment_link}"
     
     bot.reply_to(message, reply, parse_mode='Markdown')
 
@@ -253,6 +458,12 @@ def my_report(message):
     report += f"   💰 *الراتب: {user_data['salary_usd']}* USD\n\n"
     
     report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}"
+    
+    # عرض رابط استقبال الراتب
+    payment_link = user_data.get("payment_link", "")
+    if payment_link:
+        report += f"\n\n🔗 *رابط استقبال الراتب:*\n{payment_link}"
+    
     report += f"\n\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
     
     bot.reply_to(message, report, parse_mode='Markdown')
@@ -321,6 +532,12 @@ def report(message):
         report_text += f"   💵 راتب الليرة: *{user_data['salary_sy']}* ل.س\n"
         report_text += f"   💵 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
         report_text += f"   💵 راتب الدولار: *{user_data['salary_usd']}* USD\n"
+        
+        # عرض رابط الاستقبال
+        payment_link = user_data.get("payment_link", "")
+        if payment_link:
+            report_text += f"   🔗 [رابط الاستقبال]({payment_link})\n"
+        
         report_text += "─" * 10 + "\n"
         
         total_balance_sy += user_data['balance_sy']
@@ -337,7 +554,7 @@ def report(message):
     
     bot.reply_to(message, report_text, parse_mode='Markdown')
 
-# --------------------- أوامر المشرفين ---------------------
+# --------------------- أوامر المشرفين (التقارير المتقدمة) ---------------------
 
 @bot.message_handler(commands=['user_report'])
 def user_report(message):
@@ -380,6 +597,13 @@ def user_report(message):
             report += f"   📥 إجمالي المستلم: {user_data['total_in_usd']} USD\n"
             report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n"
             report += f"   💵 *الراتب: {user_data['salary_usd']}* USD\n\n"
+            
+            # عرض رابط استقبال الراتب
+            payment_link = user_data.get("payment_link", "")
+            if payment_link:
+                report += f"🔗 *رابط استقبال الراتب:*\n{payment_link}\n\n"
+            else:
+                report += f"📭 لا يوجد رابط استقبال مسجل\n\n"
             
             report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}\n"
             report += "─" * 15 + "\n\n"
@@ -470,7 +694,8 @@ def salary_rank(message):
             "salary_sy": user_data["salary_sy"],
             "salary_usd": user_data["salary_usd"],
             "total_out_sy": user_data["total_out_sy"],
-            "total_out_usd": user_data["total_out_usd"]
+            "total_out_usd": user_data["total_out_usd"],
+            "payment_link": user_data.get("payment_link", "")
         })
     
     salary_list.sort(key=lambda x: x["salary_sy"], reverse=True)
@@ -489,6 +714,8 @@ def salary_rank(message):
         report += f"   💵 الراتب (ل.س): *{emp['salary_sy']}* ل.س\n"
         if emp['salary_usd'] > 0:
             report += f"   💵 الراتب (USD): {emp['salary_usd']} USD\n"
+        if emp['payment_link']:
+            report += f"   🔗 [رابط الاستقبال]({emp['payment_link']})\n"
         report += "─" * 10 + "\n"
         rank += 1
     
@@ -502,7 +729,6 @@ def salary_rank(message):
 
 @bot.message_handler(commands=['reset'])
 def reset_balances(message):
-    """تصفير جميع الأرصدة (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -527,7 +753,6 @@ def reset_balances(message):
 
 @bot.message_handler(commands=['reset_user'])
 def reset_user_balance(message):
-    """تصفير رصيد موظف معين (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -552,11 +777,6 @@ def reset_user_balance(message):
     
     for user_id, user_data in data.items():
         if user_data["username"].lower() == target_username.lower():
-            old_balance_sy = user_data["balance_sy"]
-            old_balance_usd = user_data["balance_usd"]
-            old_salary_sy = user_data["salary_sy"]
-            old_salary_usd = user_data["salary_usd"]
-            
             user_data["balance_sy"] = 0
             user_data["balance_usd"] = 0
             user_data["total_in_sy"] = 0
@@ -566,17 +786,11 @@ def reset_user_balance(message):
             user_data["salary_sy"] = 0
             user_data["salary_usd"] = 0
             user_data["transactions"] = []
+            # لا نقوم بحذف payment_link
             
             save_data(data)
             found = True
-            bot.reply_to(message, 
-                f"✅ *تم تصفير رصيد {target_username}*\n\n"
-                f"🇸🇾 كان الرصيد: {old_balance_sy} ل.س\n"
-                f"🇸🇾 كان الراتب: {old_salary_sy} ل.س\n"
-                f"💵 كان الرصيد: {old_balance_usd} USD\n"
-                f"💵 كان الراتب: {old_salary_usd} USD",
-                parse_mode='Markdown'
-            )
+            bot.reply_to(message, f"✅ تم تصفير رصيد {target_username}")
             break
     
     if not found:
@@ -584,7 +798,6 @@ def reset_user_balance(message):
 
 @bot.message_handler(commands=['reset_confirm'])
 def reset_confirm(message):
-    """تأكيد تصفير جميع الأرصدة (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -605,33 +818,19 @@ def reset_confirm(message):
     summary = "📊 *ملخص البيانات قبل التصفير*\n"
     summary += "═" * 15 + "\n\n"
     
-    total_balance_sy = 0
-    total_balance_usd = 0
-    total_salary_sy = 0
-    total_salary_usd = 0
-    
     for user_id, user_data in data.items():
         summary += f"👤 {user_data['username']}:\n"
         summary += f"   🇸🇾 الرصيد: {user_data['balance_sy']} ل.س\n"
         summary += f"   🇸🇾 الراتب: {user_data['salary_sy']} ل.س\n"
         summary += f"   💵 الرصيد: {user_data['balance_usd']} USD\n"
         summary += f"   💵 الراتب: {user_data['salary_usd']} USD\n"
-        total_balance_sy += user_data['balance_sy']
-        total_balance_usd += user_data['balance_usd']
-        total_salary_sy += user_data['salary_sy']
-        total_salary_usd += user_data['salary_usd']
     
-    summary += f"\n💰 إجمالي أرصدة الليرة: *{total_balance_sy}* ل.س"
-    summary += f"\n💰 إجمالي رواتب الليرة: *{total_salary_sy}* ل.س"
-    summary += f"\n💰 إجمالي أرصدة الدولار: *{total_balance_usd}* USD"
-    summary += f"\n💰 إجمالي رواتب الدولار: *{total_salary_usd}* USD"
-    summary += "\n\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد."
+    summary += "\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد."
     
     bot.reply_to(message, summary, parse_mode='Markdown')
 
 @bot.message_handler(commands=['archive'])
 def show_archive(message):
-    """عرض ملفات الأرشيف المتاحة (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -670,6 +869,31 @@ def handle_message(message):
     user = message.from_user
     username = user.username or user.first_name
     
+    # --------------------- معالجة طلب "رابط @موظف" ---------------------
+    if text.lower().startswith("رابط"):
+        parts = text.split()
+        if len(parts) >= 2:
+            target_username = parts[1].replace('@', '')
+            data = load_data()
+            found = False
+            for user_id, user_data in data.items():
+                if user_data["username"].lower() == target_username.lower():
+                    found = True
+                    payment_link = user_data.get("payment_link", "")
+                    if payment_link:
+                        bot.reply_to(message,
+                            f"🔗 *رابط استقبال الراتب لـ {target_username}*\n\n"
+                            f"{payment_link}",
+                            parse_mode='Markdown'
+                        )
+                    else:
+                        bot.reply_to(message, f"📭 لا يوجد رابط استقبال مسجل لـ {target_username}")
+                    break
+            if not found:
+                bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+        return
+    
+    # --------------------- معالجة المبالغ ---------------------
     amount = None
     currency = "sy"
     note = ""
@@ -764,49 +988,25 @@ def handle_message(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
 
-# --------------------- إبقاء البوت نشطاً (Keep-Alive) ---------------------
-
-def keep_alive():
-    """إبقاء البوت نشطاً عن طريق إرسال طلب إلى نفسه كل 5 دقائق"""
-    url = "https://telegram-bot-kpt5.onrender.com"
-    while True:
-        try:
-            response = requests.get(url, timeout=10)
-            print(f"✅ تم إرسال طلب Keep-Alive إلى {url} - الحالة: {response.status_code}")
-        except Exception as e:
-            print(f"⚠️ خطأ في Keep-Alive: {e}")
-        time.sleep(300)  # 5 دقائق
-
 # --------------------- تشغيل البوت ---------------------
 
 def run_bot():
     try:
-        print("🤖 بدء تشغيل البوت...")
-        bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        bot.infinity_polling()
     except Exception as e:
         print(f"❌ خطأ في البوت: {e}")
-        time.sleep(5)
-        # إعادة تشغيل البوت إذا توقف
-        run_bot()
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة (مع الراتب التلقائي)")
+    print("🤖 بوت تتبع الأرصدة والرواتب (مع روابط الاستقبال)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print(f"💰 نسبة الراتب: {SALARY_RATE * 100}%")
     print("🔄 البوت يعمل...")
     print("=" * 40)
     
-    # بدء خيط الإبقاء على النشاط (Keep-Alive)
-    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
-    keep_alive_thread.start()
-    print("✅ تم بدء Keep-Alive (كل 5 دقائق)")
-    
-    # بدء البوت
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # تشغيل Flask
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
