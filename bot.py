@@ -6,9 +6,11 @@ from datetime import datetime
 from flask import Flask
 import threading
 import re
+import time
+import requests
 
 # --------------------- الإعدادات ---------------------
-TOKEN = "7767628116:AAFmvBu-VtwGpFqrdUWsXbhlhYY8HAig4ug"
+TOKEN = "8736403186:AAGgWCc9VpFNwkPbj-usX7QaIhK4wmthXGg"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
 SALARY_RATE = 0.005  # نسبة الراتب
@@ -26,6 +28,33 @@ def home():
 @app.route('/health')
 def health():
     return "OK", 200
+
+# --------------------- دوال الإبقاء على النشاط وإعادة التشغيل ---------------------
+
+def keep_alive():
+    """إبقاء البوت نشطاً عن طريق إرسال طلبات دورية"""
+    hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "localhost")
+    url = f"https://{hostname}/" if hostname != "localhost" else "http://localhost:5000/"
+    
+    while True:
+        try:
+            response = requests.get(url, timeout=10)
+            print(f"🔄 تم إرسال طلب إبقاء النشاط - الحالة: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ فشل طلب الإبقاء على النشاط: {e}")
+        time.sleep(300)  # كل 5 دقائق
+
+def run_bot_with_retry():
+    """تشغيل البوت مع إعادة تشغيل تلقائي عند التوقف"""
+    while True:
+        try:
+            print("🔄 بدء تشغيل البوت...")
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"❌ البوت توقف: {e}")
+            print("🔄 إعادة التشغيل بعد 5 ثوانٍ...")
+            time.sleep(5)
+            continue
 
 # --------------------- قاعدة البيانات ---------------------
 def load_data():
@@ -75,7 +104,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
             "total_out_usd": 0,
             "salary_sy": 0,
             "salary_usd": 0,
-            "payment_code": "",  # كود استقبال الراتب
+            "payment_code": "",
             "transactions": []
         }
     
@@ -177,7 +206,6 @@ def set_payment_code(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -187,7 +215,6 @@ def set_payment_code(message):
         bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
-    # استخراج البيانات من الأمر
     parts = message.text.split(maxsplit=2)
     if len(parts) < 3:
         bot.reply_to(message, "⚠️ استخدم: `/setcode @موظف الكود`", parse_mode='Markdown')
@@ -196,7 +223,6 @@ def set_payment_code(message):
     target_username = parts[1].replace('@', '')
     payment_code = parts[2].strip()
     
-    # التحقق من أن الكود ليس فارغاً
     if not payment_code:
         bot.reply_to(message, "⚠️ الكود لا يمكن أن يكون فارغاً.")
         return
@@ -217,7 +243,7 @@ def set_payment_code(message):
             break
     
     if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}\n\n💡 تأكد من أن الموظف قام بعملية مبلغ واحدة على الأقل (+1000 أو -500).")
+        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}\n\n💡 تأكد من أن الموظف قام بعملية مبلغ واحدة على الأقل.")
 
 @bot.message_handler(commands=['delcode'])
 def delete_payment_code(message):
@@ -225,7 +251,6 @@ def delete_payment_code(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -300,7 +325,7 @@ def my_payment_code(message):
     user_id_str = str(message.from_user.id)
     
     if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد بيانات لك. قم بأول عملية مبلغ (+1000 أو -500) أولاً.")
+        bot.reply_to(message, "📭 لا توجد بيانات لك. قم بأول عملية مبلغ أولاً.")
         return
     
     user_data = data[user_id_str]
@@ -326,7 +351,6 @@ def list_all_codes(message):
     if message.chat.id != GROUP_ID:
         return
     
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -338,7 +362,6 @@ def list_all_codes(message):
     
     data = load_data()
     
-    # تجميع الأكواد الموجودة فقط
     codes_list = []
     for user_id, user_data in data.items():
         payment_code = user_data.get("payment_code", "")
@@ -400,7 +423,6 @@ def salary_only(message):
     else:
         reply += f"\n📌 الراتب = إجمالي المدفوع × {SALARY_RATE}"
     
-    # عرض كود استقبال الراتب
     payment_code = user_data.get("payment_code", "")
     if payment_code:
         reply += f"\n\n🔑 *كود استقبال الراتب:*\n`{payment_code}`"
@@ -459,7 +481,6 @@ def my_report(message):
     
     report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}"
     
-    # عرض كود استقبال الراتب
     payment_code = user_data.get("payment_code", "")
     if payment_code:
         report += f"\n\n🔑 *كود استقبال الراتب:*\n`{payment_code}`"
@@ -533,7 +554,6 @@ def report(message):
         report_text += f"   💵 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
         report_text += f"   💵 راتب الدولار: *{user_data['salary_usd']}* USD\n"
         
-        # عرض كود الاستقبال
         payment_code = user_data.get("payment_code", "")
         if payment_code:
             report_text += f"   🔑 كود الاستقبال: `{payment_code}`\n"
@@ -598,7 +618,6 @@ def user_report(message):
             report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n"
             report += f"   💵 *الراتب: {user_data['salary_usd']}* USD\n\n"
             
-            # عرض كود استقبال الراتب
             payment_code = user_data.get("payment_code", "")
             if payment_code:
                 report += f"🔑 *كود استقبال الراتب:*\n`{payment_code}`\n\n"
@@ -786,7 +805,6 @@ def reset_user_balance(message):
             user_data["salary_sy"] = 0
             user_data["salary_usd"] = 0
             user_data["transactions"] = []
-            # لا نقوم بحذف payment_code
             
             save_data(data)
             found = True
@@ -988,25 +1006,27 @@ def handle_message(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
 
-# --------------------- تشغيل البوت ---------------------
-
-def run_bot():
-    try:
-        bot.infinity_polling()
-    except Exception as e:
-        print(f"❌ خطأ في البوت: {e}")
+# --------------------- تشغيل البوت مع الإبقاء على النشاط وإعادة التشغيل التلقائي ---------------------
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة والرواتب (مع أكواد الاستقبال)")
+    print("🤖 بوت تتبع الأرصدة والرواتب (مع تشغيل مستمر)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print(f"💰 نسبة الراتب: {SALARY_RATE * 100}%")
-    print("🔄 البوت يعمل...")
+    print("🔄 البوت يعمل مع إعادة تشغيل تلقائي...")
     print("=" * 40)
     
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
+    # تشغيل خيط الإبقاء على النشاط
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+    print("✅ تم تشغيل خدمة الإبقاء على النشاط (كل 5 دقائق)")
     
+    # تشغيل البوت في خيط منفصل مع إعادة تشغيل تلقائي
+    bot_thread = threading.Thread(target=run_bot_with_retry, daemon=True)
+    bot_thread.start()
+    print("✅ تم تشغيل البوت مع إعادة تشغيل تلقائي عند التوقف")
+    
+    # تشغيل خادم Flask
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
