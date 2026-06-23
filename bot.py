@@ -8,7 +8,7 @@ import threading
 import re
 
 # --------------------- الإعدادات ---------------------
-TOKEN = "8736403186:AAGgWCc9VpFNwkPbj-usX7QaIhK4wmthXGg"
+TOKEN = "7767628116:AAFmvBu-VtwGpFqrdUWsXbhlhYY8HAig4ug"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
 SALARY_RATE = 0.005  # نسبة الراتب
