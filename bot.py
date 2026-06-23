@@ -75,7 +75,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
             "total_out_usd": 0,
             "salary_sy": 0,
             "salary_usd": 0,
-            "payment_link": "",  # رابط استقبال الراتب
+            "payment_code": "",  # كود استقبال الراتب
             "transactions": []
         }
     
@@ -145,12 +145,12 @@ def start(message):
         "`+100$` أو `استلام 100 دولار`\n\n"
         "📌 *لخصم مبلغ مدفوع بالدولار:*\n"
         "`-50$` أو `دفع 50 دولار`\n\n"
-        "🔗 *روابط استقبال الراتب:*\n"
-        "`/setlink @موظف الرابط` - تعيين رابط استقبال لموظف (للمشرفين)\n"
-        "`/dellink @موظف` - حذف رابط استقبال موظف (للمشرفين)\n"
-        "`/link @موظف` - عرض رابط استقبال الموظف\n"
-        "`/mylink` - عرض رابط استقبالك أنت\n"
-        "`/listlinks` - عرض جميع الروابط المسجلة (للمشرفين)\n\n"
+        "🔑 *أكواد استقبال الراتب:*\n"
+        "`/setcode @موظف الكود` - تعيين كود استقبال لموظف (للمشرفين)\n"
+        "`/delcode @موظف` - حذف كود استقبال موظف (للمشرفين)\n"
+        "`/code @موظف` - عرض كود استقبال الموظف\n"
+        "`/mycode` - عرض كود استقبالك أنت\n"
+        "`/listcodes` - عرض جميع الأكواد المسجلة (للمشرفين)\n\n"
         "💰 *عرض الراتب:*\n"
         "`/S` - عرض راتبك فقط\n\n"
         "📊 *أوامر التقارير:*\n"
@@ -169,11 +169,11 @@ def start(message):
         parse_mode='Markdown'
     )
 
-# --------------------- أوامر روابط استقبال الراتب ---------------------
+# --------------------- أوامر أكواد استقبال الراتب ---------------------
 
-@bot.message_handler(commands=['setlink'])
-def set_payment_link(message):
-    """تعيين رابط استقبال الراتب لموظف (للمشرفين فقط)"""
+@bot.message_handler(commands=['setcode'])
+def set_payment_code(message):
+    """تعيين كود استقبال الراتب لموظف (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -190,15 +190,15 @@ def set_payment_link(message):
     # استخراج البيانات من الأمر
     parts = message.text.split(maxsplit=2)
     if len(parts) < 3:
-        bot.reply_to(message, "⚠️ استخدم: `/setlink @موظف الرابط`", parse_mode='Markdown')
+        bot.reply_to(message, "⚠️ استخدم: `/setcode @موظف الكود`", parse_mode='Markdown')
         return
     
     target_username = parts[1].replace('@', '')
-    payment_link = parts[2].strip()
+    payment_code = parts[2].strip()
     
-    # التحقق من صحة الرابط
-    if not payment_link.startswith('http://') and not payment_link.startswith('https://'):
-        bot.reply_to(message, "⚠️ الرابط يجب أن يبدأ بـ http:// أو https://")
+    # التحقق من أن الكود ليس فارغاً
+    if not payment_code:
+        bot.reply_to(message, "⚠️ الكود لا يمكن أن يكون فارغاً.")
         return
     
     data = load_data()
@@ -206,12 +206,12 @@ def set_payment_link(message):
     
     for user_id, user_data in data.items():
         if user_data["username"].lower() == target_username.lower():
-            user_data["payment_link"] = payment_link
+            user_data["payment_code"] = payment_code
             save_data(data)
             found = True
             bot.reply_to(message, 
-                f"✅ *تم تعيين رابط استقبال الراتب لـ {target_username}*\n\n"
-                f"🔗 {payment_link}",
+                f"✅ *تم تعيين كود استقبال الراتب لـ {target_username}*\n\n"
+                f"🔑 `{payment_code}`",
                 parse_mode='Markdown'
             )
             break
@@ -219,9 +219,9 @@ def set_payment_link(message):
     if not found:
         bot.reply_to(message, f"❌ لم يتم العثور على {target_username}\n\n💡 تأكد من أن الموظف قام بعملية مبلغ واحدة على الأقل (+1000 أو -500).")
 
-@bot.message_handler(commands=['dellink'])
-def delete_payment_link(message):
-    """حذف رابط استقبال الراتب لموظف (للمشرفين فقط)"""
+@bot.message_handler(commands=['delcode'])
+def delete_payment_code(message):
+    """حذف كود استقبال الراتب لموظف (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -237,7 +237,7 @@ def delete_payment_link(message):
     
     parts = message.text.split()
     if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/dellink @موظف`", parse_mode='Markdown')
+        bot.reply_to(message, "⚠️ استخدم: `/delcode @موظف`", parse_mode='Markdown')
         return
     
     target_username = parts[1].replace('@', '')
@@ -247,24 +247,24 @@ def delete_payment_link(message):
     
     for user_id, user_data in data.items():
         if user_data["username"].lower() == target_username.lower():
-            user_data["payment_link"] = ""
+            user_data["payment_code"] = ""
             save_data(data)
             found = True
-            bot.reply_to(message, f"🗑️ تم حذف رابط استقبال {target_username}")
+            bot.reply_to(message, f"🗑️ تم حذف كود استقبال {target_username}")
             break
     
     if not found:
         bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
 
-@bot.message_handler(commands=['link'])
-def get_payment_link(message):
-    """عرض رابط استقبال الراتب لموظف"""
+@bot.message_handler(commands=['code'])
+def get_payment_code(message):
+    """عرض كود استقبال الراتب لموظف"""
     if message.chat.id != GROUP_ID:
         return
     
     parts = message.text.split()
     if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/link @موظف`", parse_mode='Markdown')
+        bot.reply_to(message, "⚠️ استخدم: `/code @موظف`", parse_mode='Markdown')
         return
     
     target_username = parts[1].replace('@', '')
@@ -275,24 +275,24 @@ def get_payment_link(message):
     for user_id, user_data in data.items():
         if user_data["username"].lower() == target_username.lower():
             found = True
-            payment_link = user_data.get("payment_link", "")
+            payment_code = user_data.get("payment_code", "")
             
-            if payment_link:
+            if payment_code:
                 bot.reply_to(message,
-                    f"🔗 *رابط استقبال الراتب لـ {target_username}*\n\n"
-                    f"{payment_link}",
+                    f"🔑 *كود استقبال الراتب لـ {target_username}*\n\n"
+                    f"`{payment_code}`",
                     parse_mode='Markdown'
                 )
             else:
-                bot.reply_to(message, f"📭 لا يوجد رابط استقبال مسجل لـ {target_username}")
+                bot.reply_to(message, f"📭 لا يوجد كود استقبال مسجل لـ {target_username}")
             break
     
     if not found:
         bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
 
-@bot.message_handler(commands=['mylink'])
-def my_payment_link(message):
-    """عرض رابط استقبال الراتب الخاص بي"""
+@bot.message_handler(commands=['mycode'])
+def my_payment_code(message):
+    """عرض كود استقبال الراتب الخاص بي"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -304,25 +304,25 @@ def my_payment_link(message):
         return
     
     user_data = data[user_id_str]
-    payment_link = user_data.get("payment_link", "")
+    payment_code = user_data.get("payment_code", "")
     
-    if payment_link:
+    if payment_code:
         bot.reply_to(message,
-            f"🔗 *رابط استقبال الراتب الخاص بك*\n\n"
-            f"{payment_link}",
+            f"🔑 *كود استقبال الراتب الخاص بك*\n\n"
+            f"`{payment_code}`",
             parse_mode='Markdown'
         )
     else:
         bot.reply_to(message, 
-            "📭 لا يوجد رابط استقبال مسجل لك.\n\n"
-            "💡 اطلب من المشرف تعيين رابط لك باستخدام:\n"
-            "`/setlink @اسمك الرابط`",
+            "📭 لا يوجد كود استقبال مسجل لك.\n\n"
+            "💡 اطلب من المشرف تعيين كود لك باستخدام:\n"
+            "`/setcode @اسمك الكود`",
             parse_mode='Markdown'
         )
 
-@bot.message_handler(commands=['listlinks'])
-def list_all_links(message):
-    """عرض جميع الروابط المسجلة (للمشرفين فقط)"""
+@bot.message_handler(commands=['listcodes'])
+def list_all_codes(message):
+    """عرض جميع الأكواد المسجلة (للمشرفين فقط)"""
     if message.chat.id != GROUP_ID:
         return
     
@@ -338,26 +338,26 @@ def list_all_links(message):
     
     data = load_data()
     
-    # تجميع الروابط الموجودة فقط
-    links_list = []
+    # تجميع الأكواد الموجودة فقط
+    codes_list = []
     for user_id, user_data in data.items():
-        payment_link = user_data.get("payment_link", "")
-        if payment_link:
-            links_list.append({
+        payment_code = user_data.get("payment_code", "")
+        if payment_code:
+            codes_list.append({
                 "username": user_data["username"],
-                "link": payment_link
+                "code": payment_code
             })
     
-    if not links_list:
-        bot.reply_to(message, "📭 لا توجد روابط مسجلة.")
+    if not codes_list:
+        bot.reply_to(message, "📭 لا توجد أكواد مسجلة.")
         return
     
-    report = "📋 *قائمة روابط استقبال الراتب*\n"
+    report = "📋 *قائمة أكواد استقبال الراتب*\n"
     report += "═" * 20 + "\n\n"
     
-    for item in links_list:
+    for item in codes_list:
         report += f"👤 *{item['username']}*\n"
-        report += f"🔗 {item['link']}\n"
+        report += f"🔑 `{item['code']}`\n"
         report += "─" * 15 + "\n"
     
     bot.reply_to(message, report, parse_mode='Markdown')
@@ -400,10 +400,10 @@ def salary_only(message):
     else:
         reply += f"\n📌 الراتب = إجمالي المدفوع × {SALARY_RATE}"
     
-    # عرض رابط استقبال الراتب
-    payment_link = user_data.get("payment_link", "")
-    if payment_link:
-        reply += f"\n\n🔗 *رابط استقبال الراتب:*\n{payment_link}"
+    # عرض كود استقبال الراتب
+    payment_code = user_data.get("payment_code", "")
+    if payment_code:
+        reply += f"\n\n🔑 *كود استقبال الراتب:*\n`{payment_code}`"
     
     bot.reply_to(message, reply, parse_mode='Markdown')
 
@@ -459,10 +459,10 @@ def my_report(message):
     
     report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}"
     
-    # عرض رابط استقبال الراتب
-    payment_link = user_data.get("payment_link", "")
-    if payment_link:
-        report += f"\n\n🔗 *رابط استقبال الراتب:*\n{payment_link}"
+    # عرض كود استقبال الراتب
+    payment_code = user_data.get("payment_code", "")
+    if payment_code:
+        report += f"\n\n🔑 *كود استقبال الراتب:*\n`{payment_code}`"
     
     report += f"\n\n📌 *ملاحظة:* الراتب = إجمالي المدفوع × {SALARY_RATE}"
     
@@ -533,10 +533,10 @@ def report(message):
         report_text += f"   💵 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
         report_text += f"   💵 راتب الدولار: *{user_data['salary_usd']}* USD\n"
         
-        # عرض رابط الاستقبال
-        payment_link = user_data.get("payment_link", "")
-        if payment_link:
-            report_text += f"   🔗 [رابط الاستقبال]({payment_link})\n"
+        # عرض كود الاستقبال
+        payment_code = user_data.get("payment_code", "")
+        if payment_code:
+            report_text += f"   🔑 كود الاستقبال: `{payment_code}`\n"
         
         report_text += "─" * 10 + "\n"
         
@@ -598,12 +598,12 @@ def user_report(message):
             report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n"
             report += f"   💵 *الراتب: {user_data['salary_usd']}* USD\n\n"
             
-            # عرض رابط استقبال الراتب
-            payment_link = user_data.get("payment_link", "")
-            if payment_link:
-                report += f"🔗 *رابط استقبال الراتب:*\n{payment_link}\n\n"
+            # عرض كود استقبال الراتب
+            payment_code = user_data.get("payment_code", "")
+            if payment_code:
+                report += f"🔑 *كود استقبال الراتب:*\n`{payment_code}`\n\n"
             else:
-                report += f"📭 لا يوجد رابط استقبال مسجل\n\n"
+                report += f"📭 لا يوجد كود استقبال مسجل\n\n"
             
             report += f"📝 عدد المعاملات اليوم: {len(user_data['transactions'])}\n"
             report += "─" * 15 + "\n\n"
@@ -695,7 +695,7 @@ def salary_rank(message):
             "salary_usd": user_data["salary_usd"],
             "total_out_sy": user_data["total_out_sy"],
             "total_out_usd": user_data["total_out_usd"],
-            "payment_link": user_data.get("payment_link", "")
+            "payment_code": user_data.get("payment_code", "")
         })
     
     salary_list.sort(key=lambda x: x["salary_sy"], reverse=True)
@@ -714,8 +714,8 @@ def salary_rank(message):
         report += f"   💵 الراتب (ل.س): *{emp['salary_sy']}* ل.س\n"
         if emp['salary_usd'] > 0:
             report += f"   💵 الراتب (USD): {emp['salary_usd']} USD\n"
-        if emp['payment_link']:
-            report += f"   🔗 [رابط الاستقبال]({emp['payment_link']})\n"
+        if emp['payment_code']:
+            report += f"   🔑 كود الاستقبال: `{emp['payment_code']}`\n"
         report += "─" * 10 + "\n"
         rank += 1
     
@@ -786,7 +786,7 @@ def reset_user_balance(message):
             user_data["salary_sy"] = 0
             user_data["salary_usd"] = 0
             user_data["transactions"] = []
-            # لا نقوم بحذف payment_link
+            # لا نقوم بحذف payment_code
             
             save_data(data)
             found = True
@@ -869,8 +869,8 @@ def handle_message(message):
     user = message.from_user
     username = user.username or user.first_name
     
-    # --------------------- معالجة طلب "رابط @موظف" ---------------------
-    if text.lower().startswith("رابط"):
+    # --------------------- معالجة طلب "رابط @موظف" أو "كود @موظف" ---------------------
+    if text.lower().startswith("رابط") or text.lower().startswith("كود"):
         parts = text.split()
         if len(parts) >= 2:
             target_username = parts[1].replace('@', '')
@@ -879,15 +879,15 @@ def handle_message(message):
             for user_id, user_data in data.items():
                 if user_data["username"].lower() == target_username.lower():
                     found = True
-                    payment_link = user_data.get("payment_link", "")
-                    if payment_link:
+                    payment_code = user_data.get("payment_code", "")
+                    if payment_code:
                         bot.reply_to(message,
-                            f"🔗 *رابط استقبال الراتب لـ {target_username}*\n\n"
-                            f"{payment_link}",
+                            f"🔑 *كود استقبال الراتب لـ {target_username}*\n\n"
+                            f"`{payment_code}`",
                             parse_mode='Markdown'
                         )
                     else:
-                        bot.reply_to(message, f"📭 لا يوجد رابط استقبال مسجل لـ {target_username}")
+                        bot.reply_to(message, f"📭 لا يوجد كود استقبال مسجل لـ {target_username}")
                     break
             if not found:
                 bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
@@ -998,7 +998,7 @@ def run_bot():
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة والرواتب (مع روابط الاستقبال)")
+    print("🤖 بوت تتبع الأرصدة والرواتب (مع أكواد الاستقبال)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print(f"💰 نسبة الراتب: {SALARY_RATE * 100}%")
