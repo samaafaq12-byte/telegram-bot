@@ -10,7 +10,7 @@ import time
 import requests
 
 # --------------------- الإعدادات ---------------------
-TOKEN = "8998053211:AAHULMw1lmGRxcvxg_KzQZhG93yOdH6mENU"
+TOKEN = "8855886445:AAE7PhgeUauhQ9rQ4mjJqQmhOg9ccRGreYo"
 GROUP_ID = -1004481566972
 DATA_FILE = "data.json"
 
