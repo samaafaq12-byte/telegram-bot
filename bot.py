@@ -8,6 +8,7 @@ import threading
 import re
 import time
 import requests
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 # --------------------- الإعدادات ---------------------
 TOKEN = "8855886445:AAE7PhgeUauhQ9rQ4mjJqQmhOg9ccRGreYo"
@@ -133,431 +134,220 @@ def get_user_full_report(user_id):
         return None
     return data[user_id_str]
 
-# --------------------- أوامر الملف الشخصي للموظف ---------------------
+# --------------------- دوال الأزرار ---------------------
 
-@bot.message_handler(commands=['myprofile'])
-def my_profile(message):
-    """عرض الملف الشخصي للموظف"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    data = load_data()
-    user_id_str = str(message.from_user.id)
-    
-    if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد بيانات لك. قم بأول عملية مبلغ أولاً.")
-        return
-    
-    user_data = data[user_id_str]
-    
-    profile = f"📋 *الملف الشخصي لـ {user_data['username']}*\n"
-    profile += "═" * 25 + "\n\n"
-    profile += f"👤 الاسم الثلاثي: {user_data.get('full_name', 'غير مسجل')}\n"
-    profile += f"📱 رقم الهاتف: {user_data.get('phone', 'غير مسجل')}\n"
-    profile += f"🔑 كود الاستقبال: {user_data.get('payment_code', 'غير مسجل')}\n"
-    profile += f"💰 رصيد الليرة: *{user_data['balance_sy']}* ل.س\n"
-    profile += f"💰 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
-    profile += f"📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س / {user_data['total_in_usd']} USD\n"
-    profile += f"📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س / {user_data['total_out_usd']} USD\n"
-    profile += f"📝 عدد المعاملات: {len(user_data['transactions'])}"
-    
-    bot.reply_to(message, profile, parse_mode='Markdown')
+def main_menu():
+    """القائمة الرئيسية - أزرار دائمة"""
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = KeyboardButton("➕ إيداع")
+    btn2 = KeyboardButton("➖ سحب")
+    btn3 = KeyboardButton("💰 رصيدي")
+    btn4 = KeyboardButton("📊 تقارير")
+    btn5 = KeyboardButton("👤 ملفي الشخصي")
+    btn6 = KeyboardButton("🔑 كودي")
+    btn7 = KeyboardButton("📋 قائمة الأكواد")
+    btn8 = KeyboardButton("⚙️ إدارة")
+    markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8)
+    return markup
 
-@bot.message_handler(commands=['setprofile'])
-def set_profile(message):
-    """تعيين الملف الشخصي للموظف (الاسم الثلاثي، رقم الهاتف، كود الاستقبال)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    parts = message.text.split(maxsplit=3)
-    if len(parts) < 4:
-        bot.reply_to(message, 
-            "⚠️ *استخدم:* `/setprofile الاسم_الثلاثي رقم_الهاتف كود_الاستقبال`\n\n"
-            "مثال:\n"
-            "`/setprofile أحمد محمد علي 0912345678 8324217cd72dae144243c7010390d636`",
-            parse_mode='Markdown'
-        )
-        return
-    
-    full_name = parts[1].strip()
-    phone = parts[2].strip()
-    payment_code = parts[3].strip()
-    
-    if not phone.isdigit():
-        bot.reply_to(message, "⚠️ رقم الهاتف يجب أن يحتوي على أرقام فقط.")
-        return
-    
-    data = load_data()
-    user_id_str = str(message.from_user.id)
-    
-    if user_id_str not in data:
-        data[user_id_str] = {
-            "username": message.from_user.username or message.from_user.first_name,
-            "full_name": full_name,
-            "phone": phone,
-            "payment_code": payment_code,
-            "balance_sy": 0,
-            "balance_usd": 0,
-            "total_in_sy": 0,
-            "total_out_sy": 0,
-            "total_in_usd": 0,
-            "total_out_usd": 0,
-            "transactions": []
-        }
-    else:
-        data[user_id_str]["full_name"] = full_name
-        data[user_id_str]["phone"] = phone
-        data[user_id_str]["payment_code"] = payment_code
-    
-    save_data(data)
-    
-    bot.reply_to(message,
-        f"✅ *تم تحديث الملف الشخصي بنجاح*\n\n"
-        f"👤 الاسم الثلاثي: {full_name}\n"
-        f"📱 رقم الهاتف: {phone}\n"
-        f"🔑 كود الاستقبال: `{payment_code}`",
-        parse_mode='Markdown'
-    )
+def admin_menu():
+    """قائمة المشرفين"""
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = KeyboardButton("📋 تقرير موظف")
+    btn2 = KeyboardButton("📊 جميع المعاملات")
+    btn3 = KeyboardButton("🔄 تصفير الكل")
+    btn4 = KeyboardButton("🔄 تصفير موظف")
+    btn5 = KeyboardButton("🔙 رجوع")
+    markup.add(btn1, btn2, btn3, btn4, btn5)
+    return markup
 
-@bot.message_handler(commands=['profile'])
-def profile(message):
-    """عرض الملف الشخصي لموظف معين (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/profile @موظف`", parse_mode='Markdown')
-        return
-    
-    target_username = parts[1].replace('@', '')
-    
-    data = load_data()
-    found = False
-    
-    for user_id, user_data in data.items():
-        if user_data["username"].lower() == target_username.lower():
-            profile = f"📋 *الملف الشخصي لـ {user_data['username']}*\n"
-            profile += "═" * 25 + "\n\n"
-            profile += f"👤 الاسم الثلاثي: {user_data.get('full_name', 'غير مسجل')}\n"
-            profile += f"📱 رقم الهاتف: {user_data.get('phone', 'غير مسجل')}\n"
-            profile += f"🔑 كود الاستقبال: {user_data.get('payment_code', 'غير مسجل')}\n"
-            profile += f"💰 رصيد الليرة: *{user_data['balance_sy']}* ل.س\n"
-            profile += f"💰 رصيد الدولار: *{user_data['balance_usd']}* USD\n"
-            profile += f"📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س / {user_data['total_in_usd']} USD\n"
-            profile += f"📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س / {user_data['total_out_usd']} USD\n"
-            profile += f"📝 عدد المعاملات: {len(user_data['transactions'])}"
-            
-            bot.reply_to(message, profile, parse_mode='Markdown')
-            found = True
-            break
-    
-    if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+def currency_menu():
+    """اختيار العملة"""
+    markup = InlineKeyboardMarkup(row_width=2)
+    btn1 = InlineKeyboardButton("🇸🇾 ليرة سورية", callback_data="currency_sy")
+    btn2 = InlineKeyboardButton("💵 دولار أمريكي", callback_data="currency_usd")
+    btn3 = InlineKeyboardButton("🔙 إلغاء", callback_data="cancel")
+    markup.add(btn1, btn2, btn3)
+    return markup
 
-# --------------------- أوامر أكواد استقبال الراتب ---------------------
+def report_menu():
+    """قائمة التقارير"""
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = KeyboardButton("📊 تقرير اليوم")
+    btn2 = KeyboardButton("📊 تقرير كامل")
+    btn3 = KeyboardButton("📋 سجل معاملاتي")
+    btn4 = KeyboardButton("🔙 رجوع")
+    markup.add(btn1, btn2, btn3, btn4)
+    return markup
 
-@bot.message_handler(commands=['setcode'])
-def set_payment_code(message):
-    """تعيين كود استقبال الراتب لموظف (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 3:
-        bot.reply_to(message, "⚠️ استخدم: `/setcode @موظف الكود`", parse_mode='Markdown')
-        return
-    
-    target_username = parts[1].replace('@', '')
-    payment_code = parts[2].strip()
-    
-    if not payment_code:
-        bot.reply_to(message, "⚠️ الكود لا يمكن أن يكون فارغاً.")
-        return
-    
-    data = load_data()
-    found = False
-    
-    for user_id, user_data in data.items():
-        if user_data["username"].lower() == target_username.lower():
-            user_data["payment_code"] = payment_code
-            save_data(data)
-            found = True
-            bot.reply_to(message, 
-                f"✅ *تم تعيين كود استقبال الراتب لـ {target_username}*\n\n"
-                f"🔑 `{payment_code}`",
-                parse_mode='Markdown'
-            )
-            break
-    
-    if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}\n\n💡 تأكد من أن الموظف قام بعملية مبلغ واحدة على الأقل.")
+# --------------------- حالة المستخدمين ---------------------
+user_states = {}
 
-@bot.message_handler(commands=['delcode'])
-def delete_payment_code(message):
-    """حذف كود استقبال الراتب لموظف (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/delcode @موظف`", parse_mode='Markdown')
-        return
-    
-    target_username = parts[1].replace('@', '')
-    
-    data = load_data()
-    found = False
-    
-    for user_id, user_data in data.items():
-        if user_data["username"].lower() == target_username.lower():
-            user_data["payment_code"] = ""
-            save_data(data)
-            found = True
-            bot.reply_to(message, f"🗑️ تم حذف كود استقبال {target_username}")
-            break
-    
-    if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
-
-@bot.message_handler(commands=['code'])
-def get_payment_code(message):
-    """عرض كود استقبال الراتب لموظف"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/code @موظف`", parse_mode='Markdown')
-        return
-    
-    target_username = parts[1].replace('@', '')
-    
-    data = load_data()
-    found = False
-    
-    for user_id, user_data in data.items():
-        if user_data["username"].lower() == target_username.lower():
-            found = True
-            payment_code = user_data.get("payment_code", "")
-            
-            if payment_code:
-                bot.reply_to(message,
-                    f"🔑 *كود استقبال الراتب لـ {target_username}*\n\n"
-                    f"`{payment_code}`",
-                    parse_mode='Markdown'
-                )
-            else:
-                bot.reply_to(message, f"📭 لا يوجد كود استقبال مسجل لـ {target_username}")
-            break
-    
-    if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
-
-@bot.message_handler(commands=['mycode'])
-def my_payment_code(message):
-    """عرض كود استقبال الراتب الخاص بي"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    data = load_data()
-    user_id_str = str(message.from_user.id)
-    
-    if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد بيانات لك. قم بأول عملية مبلغ أولاً.")
-        return
-    
-    user_data = data[user_id_str]
-    payment_code = user_data.get("payment_code", "")
-    
-    if payment_code:
-        bot.reply_to(message,
-            f"🔑 *كود استقبال الراتب الخاص بك*\n\n"
-            f"`{payment_code}`",
-            parse_mode='Markdown'
-        )
-    else:
-        bot.reply_to(message, 
-            "📭 لا يوجد كود استقبال مسجل لك.\n\n"
-            "💡 استخدم الأمر التالي لتسجيل ملفك الشخصي:\n"
-            "`/setprofile الاسم_الثلاثي رقم_الهاتف كود_الاستقبال`",
-            parse_mode='Markdown'
-        )
-
-@bot.message_handler(commands=['listcodes'])
-def list_all_codes(message):
-    """عرض جميع الأكواد المسجلة (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    data = load_data()
-    
-    codes_list = []
-    for user_id, user_data in data.items():
-        payment_code = user_data.get("payment_code", "")
-        if payment_code:
-            codes_list.append({
-                "username": user_data["username"],
-                "code": payment_code,
-                "full_name": user_data.get("full_name", "غير مسجل"),
-                "phone": user_data.get("phone", "غير مسجل")
-            })
-    
-    if not codes_list:
-        bot.reply_to(message, "📭 لا توجد أكواد مسجلة.")
-        return
-    
-    report = "📋 *قائمة أكواد استقبال الراتب*\n"
-    report += "═" * 20 + "\n\n"
-    
-    for item in codes_list:
-        report += f"👤 *{item['username']}*\n"
-        report += f"   الاسم: {item['full_name']}\n"
-        report += f"   📱 هاتف: {item['phone']}\n"
-        report += f"   🔑 `{item['code']}`\n"
-        report += "─" * 15 + "\n"
-    
-    bot.reply_to(message, report, parse_mode='Markdown')
-
-# --------------------- أوامر التقارير ---------------------
+# --------------------- أوامر البوت والأزرار ---------------------
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    """رسالة ترحيبية مع أزرار"""
     bot.reply_to(message, 
-        "👋 *مرحباً! أنا بوت تتبع الأرصدة*\n\n"
-        "📌 *لإضافة مبلغ مستلم بالليرة السورية:*\n"
-        "`+1000` أو `استلام 1000`\n\n"
-        "📌 *لخصم مبلغ مدفوع بالليرة السورية:*\n"
-        "`-500` أو `دفع 500`\n\n"
-        "📌 *لإضافة مبلغ مستلم بالدولار:*\n"
-        "`+100$` أو `استلام 100 دولار`\n\n"
-        "📌 *لخصم مبلغ مدفوع بالدولار:*\n"
-        "`-50$` أو `دفع 50 دولار`\n\n"
-        "📋 *الملف الشخصي:*\n"
-        "`/setprofile الاسم_الثلاثي رقم_الهاتف كود_الاستقبال` - تسجيل ملفك الشخصي\n"
-        "`/myprofile` - عرض ملفك الشخصي\n"
-        "`/profile @موظف` - عرض ملف موظف (للمشرفين)\n\n"
-        "🔑 *أكواد استقبال الراتب:*\n"
-        "`/code @موظف` - عرض كود موظف\n"
-        "`/mycode` - عرض كودك\n"
-        "`/listcodes` - عرض جميع الأكواد (للمشرفين)\n\n"
-        "📊 *أوامر التقارير:*\n"
-        "`/balance` - عرض رصيدك فقط\n"
-        "`/myreport` - تقريرك المفصل\n"
-        "`/history` - سجل معاملاتك\n"
-        "`/report` - تقرير اليوم للجميع\n"
-        "`/fullreport` - تقرير كامل\n\n"
-        "👑 *أوامر المشرفين:*\n"
-        "`/user_report @username` - تقرير موظف محدد\n"
-        "`/all_transactions` - جميع المعاملات\n"
-        "`/reset` - تصفير الأرصدة فقط (الملف الشخصي محفوظ)\n"
-        "`/reset_user @username` - تصفير رصيد موظف (الملف الشخصي محفوظ)\n"
-        "`/reset_confirm` - عرض ملخص قبل التصفير\n"
-        "`/archive` - عرض ملفات الأرشيف\n\n"
-        "📌 *ملاحظة:* الملفات الشخصية والأكواد **لا تُحذف** عند التصفير أو مسح المحادثات",
-        parse_mode='Markdown'
+        "👋 *مرحباً بك في بوت تتبع الأرصدة*\n\n"
+        "📌 استخدم الأزرار أدناه للتنقل:\n"
+        "• ➕ إيداع - لإضافة مبلغ مستلم\n"
+        "• ➖ سحب - لخصم مبلغ مدفوع\n"
+        "• 💰 رصيدي - لعرض رصيدك\n"
+        "• 📊 تقارير - لعرض التقارير\n"
+        "• 👤 ملفي الشخصي - لعرض وتعديل ملفك\n"
+        "• 🔑 كودي - لعرض كود الاستقبال\n"
+        "• 📋 قائمة الأكواد - لعرض جميع الأكواد (للمشرفين)\n"
+        "• ⚙️ إدارة - لأوامر المشرفين",
+        parse_mode='Markdown',
+        reply_markup=main_menu()
     )
 
-@bot.message_handler(commands=['balance'])
-def balance(message):
-    if message.chat.id != GROUP_ID:
-        return
-    
-    data = load_data()
-    user_id_str = str(message.from_user.id)
-    
-    if user_id_str in data:
-        user_data = data[user_id_str]
-        bot.reply_to(message,
-            f"👤 *{user_data['username']}*\n\n"
-            f"🇸🇾 *رصيد الليرة:* {user_data['balance_sy']} ل.س\n"
-            f"💵 *رصيد الدولار:* {user_data['balance_usd']} USD",
-            parse_mode='Markdown'
-        )
-    else:
-        bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
+@bot.message_handler(func=lambda message: message.text == "➕ إيداع")
+def deposit(message):
+    """زر الإيداع"""
+    user_states[message.from_user.id] = "waiting_deposit_amount"
+    bot.reply_to(message, 
+        "📥 *إيداع مبلغ*\n\n"
+        "أرسل المبلغ الذي تريد إضافته:\n"
+        "مثال: `1000` أو `500$`",
+        parse_mode='Markdown',
+        reply_markup=currency_menu()
+    )
 
-@bot.message_handler(commands=['myreport'])
-def my_report(message):
-    if message.chat.id != GROUP_ID:
-        return
-    
+@bot.message_handler(func=lambda message: message.text == "➖ سحب")
+def withdraw(message):
+    """زر السحب"""
+    user_states[message.from_user.id] = "waiting_withdraw_amount"
+    bot.reply_to(message, 
+        "📤 *سحب مبلغ*\n\n"
+        "أرسل المبلغ الذي تريد خصمه:\n"
+        "مثال: `500` أو `50$`",
+        parse_mode='Markdown',
+        reply_markup=currency_menu()
+    )
+
+@bot.message_handler(func=lambda message: message.text == "💰 رصيدي")
+def my_balance(message):
+    """عرض الرصيد"""
     data = load_data()
     user_id_str = str(message.from_user.id)
     
     if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
+        bot.reply_to(message, "📭 لا توجد معاملات لك.")
         return
     
     user_data = data[user_id_str]
-    
-    report = f"📊 *تقرير رصيد {user_data['username']}*\n"
-    report += "═" * 20 + "\n\n"
-    
-    report += "🇸🇾 *الليرة السورية:*\n"
-    report += f"   💰 الرصيد: *{user_data['balance_sy']}* ل.س\n"
-    report += f"   📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س\n"
-    report += f"   📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س\n\n"
-    
-    report += "💵 *الدولار الأمريكي:*\n"
-    report += f"   💰 الرصيد: *{user_data['balance_usd']}* USD\n"
-    report += f"   📥 إجمالي المستلم: {user_data['total_in_usd']} USD\n"
-    report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n\n"
-    
-    report += f"📝 عدد المعاملات: {len(user_data['transactions'])}"
-    
-    payment_code = user_data.get("payment_code", "")
-    if payment_code:
-        report += f"\n\n🔑 *كود استقبال الراتب:*\n`{payment_code}`"
-    
-    bot.reply_to(message, report, parse_mode='Markdown')
+    bot.reply_to(message,
+        f"💰 *رصيد {user_data['username']}*\n\n"
+        f"🇸🇾 ليرة سورية: *{user_data['balance_sy']}* ل.س\n"
+        f"💵 دولار أمريكي: *{user_data['balance_usd']}* USD",
+        parse_mode='Markdown'
+    )
 
-@bot.message_handler(commands=['history'])
-def history(message):
-    if message.chat.id != GROUP_ID:
+@bot.message_handler(func=lambda message: message.text == "📊 تقارير")
+def reports(message):
+    """قائمة التقارير"""
+    bot.reply_to(message, "📊 *اختر نوع التقرير:*", parse_mode='Markdown', reply_markup=report_menu())
+
+@bot.message_handler(func=lambda message: message.text == "📊 تقرير اليوم")
+def report_today(message):
+    """تقرير اليوم"""
+    data = load_data()
+    if not data:
+        bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
         return
     
+    report_text = "📊 *تقرير اليوم*\n"
+    report_text += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
+    report_text += "═" * 20 + "\n\n"
+    
+    total_in_sy = 0
+    total_out_sy = 0
+    total_in_usd = 0
+    total_out_usd = 0
+    
+    for user_id, user_data in data.items():
+        username = user_data["username"]
+        full_name = user_data.get("full_name", "")
+        
+        report_text += f"👤 *{username}*"
+        if full_name:
+            report_text += f" ({full_name})"
+        report_text += "\n"
+        report_text += f"   📥 استلام: {user_data['total_in_sy']} ل.س"
+        if user_data['total_in_usd'] > 0:
+            report_text += f" / {user_data['total_in_usd']} USD"
+        report_text += "\n"
+        report_text += f"   📤 دفع: {user_data['total_out_sy']} ل.س"
+        if user_data['total_out_usd'] > 0:
+            report_text += f" / {user_data['total_out_usd']} USD"
+        report_text += "\n"
+        report_text += f"   💰 الرصيد: *{user_data['balance_sy']}* ل.س"
+        if user_data['balance_usd'] != 0:
+            report_text += f" / *{user_data['balance_usd']}* USD"
+        report_text += "\n─" * 10 + "\n"
+        
+        total_in_sy += user_data['total_in_sy']
+        total_out_sy += user_data['total_out_sy']
+        total_in_usd += user_data['total_in_usd']
+        total_out_usd += user_data['total_out_usd']
+    
+    report_text += "\n📈 *ملخص*\n"
+    report_text += f"📥 إجمالي الاستلام: {total_in_sy} ل.س"
+    if total_in_usd > 0:
+        report_text += f" / {total_in_usd} USD"
+    report_text += "\n"
+    report_text += f"📤 إجمالي الدفع: {total_out_sy} ل.س"
+    if total_out_usd > 0:
+        report_text += f" / {total_out_usd} USD"
+    
+    bot.reply_to(message, report_text, parse_mode='Markdown')
+
+@bot.message_handler(func=lambda message: message.text == "📊 تقرير كامل")
+def full_report(message):
+    """تقرير كامل"""
+    data = load_data()
+    if not data:
+        bot.reply_to(message, "📭 لا توجد معاملات.")
+        return
+    
+    sorted_users = sorted(data.items(), key=lambda x: x[1]["balance_sy"] + x[1]["balance_usd"] * 15000, reverse=True)
+    
+    report_text = "📊 *تقرير كامل*\n"
+    report_text += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
+    report_text += "═" * 20 + "\n\n"
+    
+    for user_id, user_data in sorted_users:
+        full_name = user_data.get("full_name", "")
+        report_text += f"👤 *{user_data['username']}*"
+        if full_name:
+            report_text += f" ({full_name})"
+        report_text += "\n"
+        report_text += f"   📥 استلام: {user_data['total_in_sy']} ل.س"
+        if user_data['total_in_usd'] > 0:
+            report_text += f" / {user_data['total_in_usd']} USD"
+        report_text += "\n"
+        report_text += f"   📤 دفع: {user_data['total_out_sy']} ل.س"
+        if user_data['total_out_usd'] > 0:
+            report_text += f" / {user_data['total_out_usd']} USD"
+        report_text += "\n"
+        report_text += f"   💰 الرصيد: *{user_data['balance_sy']}* ل.س"
+        if user_data['balance_usd'] != 0:
+            report_text += f" / *{user_data['balance_usd']}* USD"
+        report_text += f"\n   📝 معاملات: {len(user_data['transactions'])}"
+        report_text += "\n─" * 10 + "\n"
+    
+    bot.reply_to(message, report_text, parse_mode='Markdown')
+
+@bot.message_handler(func=lambda message: message.text == "📋 سجل معاملاتي")
+def my_history(message):
+    """سجل معاملاتي"""
     data = load_data()
     user_id_str = str(message.from_user.id)
     
     if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد معاملات لك اليوم.")
+        bot.reply_to(message, "📭 لا توجد معاملات لك.")
         return
     
     user_data = data[user_id_str]
@@ -580,143 +370,123 @@ def history(message):
     
     bot.reply_to(message, history_text, parse_mode='Markdown')
 
-@bot.message_handler(commands=['report'])
-def report(message):
-    """تقرير اليوم: إجمالي ما تم استلامه وإرساله للجميع"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    data = load_data()
-    
-    if not data:
-        bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
-        return
-    
-    report_text = "📊 *تقرير إجمالي اليوم*\n"
-    report_text += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
-    report_text += "═" * 20 + "\n\n"
-    
-    total_in_sy_all = 0
-    total_out_sy_all = 0
-    total_in_usd_all = 0
-    total_out_usd_all = 0
-    total_balance_sy = 0
-    total_balance_usd = 0
-    
-    for user_id, user_data in data.items():
-        username = user_data["username"]
-        full_name = user_data.get("full_name", "")
-        
-        report_text += f"👤 *{username}*"
-        if full_name:
-            report_text += f" ({full_name})"
-        report_text += "\n"
-        report_text += f"   📥 استلام (ل.س): {user_data['total_in_sy']}\n"
-        report_text += f"   📤 إرسال (ل.س): {user_data['total_out_sy']}\n"
-        report_text += f"   💰 الرصيد (ل.س): *{user_data['balance_sy']}*\n"
-        
-        if user_data['total_in_usd'] > 0 or user_data['total_out_usd'] > 0 or user_data['balance_usd'] != 0:
-            report_text += f"   📥 استلام (USD): {user_data['total_in_usd']}\n"
-            report_text += f"   📤 إرسال (USD): {user_data['total_out_usd']}\n"
-            report_text += f"   💰 الرصيد (USD): *{user_data['balance_usd']}*\n"
-        
-        report_text += "─" * 15 + "\n"
-        
-        total_in_sy_all += user_data['total_in_sy']
-        total_out_sy_all += user_data['total_out_sy']
-        total_in_usd_all += user_data['total_in_usd']
-        total_out_usd_all += user_data['total_out_usd']
-        total_balance_sy += user_data['balance_sy']
-        total_balance_usd += user_data['balance_usd']
-    
-    report_text += "\n📈 *ملخص عام*\n"
-    report_text += f"🇸🇾 إجمالي الاستلام (ل.س): {total_in_sy_all}\n"
-    report_text += f"🇸🇾 إجمالي الإرسال (ل.س): {total_out_sy_all}\n"
-    report_text += f"🇸🇾 إجمالي الأرصدة (ل.س): *{total_balance_sy}*\n"
-    
-    if total_in_usd_all > 0 or total_out_usd_all > 0 or total_balance_usd != 0:
-        report_text += f"\n💵 إجمالي الاستلام (USD): {total_in_usd_all}\n"
-        report_text += f"💵 إجمالي الإرسال (USD): {total_out_usd_all}\n"
-        report_text += f"💵 إجمالي الأرصدة (USD): *{total_balance_usd}*\n"
-    
-    bot.reply_to(message, report_text, parse_mode='Markdown')
+@bot.message_handler(func=lambda message: message.text == "👤 ملفي الشخصي")
+def my_profile_menu(message):
+    """قائمة الملف الشخصي"""
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = KeyboardButton("📋 عرض ملفي")
+    btn2 = KeyboardButton("✏️ تحديث ملفي")
+    btn3 = KeyboardButton("🔙 رجوع")
+    markup.add(btn1, btn2, btn3)
+    bot.reply_to(message, "👤 *الملف الشخصي*\nاختر الإجراء المناسب:", parse_mode='Markdown', reply_markup=markup)
 
-@bot.message_handler(commands=['fullreport'])
-def full_report(message):
-    """تقرير كامل مع تفاصيل كل موظف"""
-    if message.chat.id != GROUP_ID:
+@bot.message_handler(func=lambda message: message.text == "📋 عرض ملفي")
+def show_my_profile(message):
+    """عرض الملف الشخصي"""
+    data = load_data()
+    user_id_str = str(message.from_user.id)
+    
+    if user_id_str not in data:
+        bot.reply_to(message, "📭 لا توجد بيانات لك.")
+        return
+    
+    user_data = data[user_id_str]
+    profile = f"📋 *الملف الشخصي*\n"
+    profile += "═" * 20 + "\n\n"
+    profile += f"👤 الاسم: {user_data.get('full_name', 'غير مسجل')}\n"
+    profile += f"📱 الهاتف: {user_data.get('phone', 'غير مسجل')}\n"
+    profile += f"🔑 الكود: {user_data.get('payment_code', 'غير مسجل')}\n"
+    profile += f"💰 رصيد: {user_data['balance_sy']} ل.س"
+    if user_data['balance_usd'] != 0:
+        profile += f" / {user_data['balance_usd']} USD"
+    profile += f"\n📥 استلام: {user_data['total_in_sy']} ل.س"
+    if user_data['total_in_usd'] > 0:
+        profile += f" / {user_data['total_in_usd']} USD"
+    profile += f"\n📤 دفع: {user_data['total_out_sy']} ل.س"
+    if user_data['total_out_usd'] > 0:
+        profile += f" / {user_data['total_out_usd']} USD"
+    profile += f"\n📝 معاملات: {len(user_data['transactions'])}"
+    
+    bot.reply_to(message, profile, parse_mode='Markdown')
+
+@bot.message_handler(func=lambda message: message.text == "✏️ تحديث ملفي")
+def update_profile(message):
+    """تحديث الملف الشخصي"""
+    user_states[message.from_user.id] = "waiting_profile_name"
+    bot.reply_to(message, 
+        "✏️ *تحديث الملف الشخصي*\n\n"
+        "أرسل الاسم الثلاثي:\n"
+        "مثال: `أحمد محمد علي`",
+        parse_mode='Markdown'
+    )
+
+@bot.message_handler(func=lambda message: message.text == "🔑 كودي")
+def my_code(message):
+    """عرض كود الاستقبال"""
+    data = load_data()
+    user_id_str = str(message.from_user.id)
+    
+    if user_id_str not in data:
+        bot.reply_to(message, "📭 لا توجد بيانات لك.")
+        return
+    
+    user_data = data[user_id_str]
+    payment_code = user_data.get("payment_code", "")
+    
+    if payment_code:
+        bot.reply_to(message,
+            f"🔑 *كود استقبال الراتب*\n\n"
+            f"`{payment_code}`",
+            parse_mode='Markdown'
+        )
+    else:
+        bot.reply_to(message, 
+            "📭 لا يوجد كود استقبال مسجل.\n\n"
+            "استخدم ✏️ تحديث ملفي لإضافة كودك.",
+            reply_markup=main_menu()
+        )
+
+@bot.message_handler(func=lambda message: message.text == "📋 قائمة الأكواد")
+def list_codes(message):
+    """عرض قائمة الأكواد (للمشرفين)"""
+    # التحقق من صلاحية المشرف
+    try:
+        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        if chat_member.status not in ["administrator", "creator"]:
+            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
+            return
+    except:
+        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
     data = load_data()
-    
-    if not data:
-        bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
-        return
-    
-    sorted_users = sorted(data.items(), key=lambda x: x[1]["balance_sy"] + x[1]["balance_usd"] * 15000, reverse=True)
-    
-    report_text = "📊 *تقرير كامل*\n"
-    report_text += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
-    report_text += "═" * 20 + "\n\n"
-    
-    total_in_sy_all = 0
-    total_out_sy_all = 0
-    total_in_usd_all = 0
-    total_out_usd_all = 0
-    total_balance_sy = 0
-    total_balance_usd = 0
-    
-    for user_id, user_data in sorted_users:
-        username = user_data["username"]
-        full_name = user_data.get("full_name", "")
-        
-        report_text += f"👤 *{username}*"
-        if full_name:
-            report_text += f" ({full_name})"
-        report_text += "\n"
-        report_text += f"   📥 استلام (ل.س): {user_data['total_in_sy']}\n"
-        report_text += f"   📤 إرسال (ل.س): {user_data['total_out_sy']}\n"
-        report_text += f"   💰 الرصيد (ل.س): *{user_data['balance_sy']}*\n"
-        report_text += f"   📝 عدد المعاملات: {len(user_data['transactions'])}\n"
-        
-        if user_data['total_in_usd'] > 0 or user_data['total_out_usd'] > 0 or user_data['balance_usd'] != 0:
-            report_text += f"   📥 استلام (USD): {user_data['total_in_usd']}\n"
-            report_text += f"   📤 إرسال (USD): {user_data['total_out_usd']}\n"
-            report_text += f"   💰 الرصيد (USD): *{user_data['balance_usd']}*\n"
-        
+    codes_list = []
+    for user_id, user_data in data.items():
         payment_code = user_data.get("payment_code", "")
         if payment_code:
-            report_text += f"   🔑 كود: `{payment_code}`\n"
-        
-        report_text += "─" * 15 + "\n"
-        
-        total_in_sy_all += user_data['total_in_sy']
-        total_out_sy_all += user_data['total_out_sy']
-        total_in_usd_all += user_data['total_in_usd']
-        total_out_usd_all += user_data['total_out_usd']
-        total_balance_sy += user_data['balance_sy']
-        total_balance_usd += user_data['balance_usd']
+            codes_list.append({
+                "username": user_data["username"],
+                "full_name": user_data.get("full_name", "غير مسجل"),
+                "code": payment_code
+            })
     
-    report_text += "\n📈 *ملخص عام*\n"
-    report_text += f"🇸🇾 إجمالي الاستلام (ل.س): {total_in_sy_all}\n"
-    report_text += f"🇸🇾 إجمالي الإرسال (ل.س): {total_out_sy_all}\n"
-    report_text += f"🇸🇾 إجمالي الأرصدة (ل.س): *{total_balance_sy}*\n"
-    
-    if total_in_usd_all > 0 or total_out_usd_all > 0 or total_balance_usd != 0:
-        report_text += f"\n💵 إجمالي الاستلام (USD): {total_in_usd_all}\n"
-        report_text += f"💵 إجمالي الإرسال (USD): {total_out_usd_all}\n"
-        report_text += f"💵 إجمالي الأرصدة (USD): *{total_balance_usd}*\n"
-    
-    bot.reply_to(message, report_text, parse_mode='Markdown')
-
-# --------------------- أوامر المشرفين (التقارير المتقدمة) ---------------------
-
-@bot.message_handler(commands=['user_report'])
-def user_report(message):
-    """عرض تقرير مفصل لموظف معين (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
+    if not codes_list:
+        bot.reply_to(message, "📭 لا توجد أكواد مسجلة.")
         return
     
+    report = "📋 *قائمة الأكواد*\n"
+    report += "═" * 20 + "\n\n"
+    for item in codes_list:
+        report += f"👤 {item['username']}\n"
+        report += f"   الاسم: {item['full_name']}\n"
+        report += f"   🔑 `{item['code']}`\n"
+        report += "─" * 10 + "\n"
+    
+    bot.reply_to(message, report, parse_mode='Markdown')
+
+@bot.message_handler(func=lambda message: message.text == "⚙️ إدارة")
+def admin_panel(message):
+    """لوحة التحكم (للمشرفين فقط)"""
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -726,82 +496,23 @@ def user_report(message):
         bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
         return
     
-    parts = message.text.split()
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/user_report @username`", parse_mode='Markdown')
-        return
-    
-    target_username = parts[1].replace('@', '')
-    
-    data = load_data()
-    found = False
-    
-    for user_id, user_data in data.items():
-        if user_data["username"].lower() == target_username.lower():
-            full_name = user_data.get("full_name", "")
-            phone = user_data.get("phone", "")
-            
-            report = f"📊 *تقرير الموظف: {user_data['username']}*\n"
-            if full_name:
-                report += f"👤 الاسم: {full_name}\n"
-            if phone:
-                report += f"📱 الهاتف: {phone}\n"
-            report += "═" * 25 + "\n\n"
-            
-            report += "🇸🇾 *الليرة السورية:*\n"
-            report += f"   💰 الرصيد: *{user_data['balance_sy']}* ل.س\n"
-            report += f"   📥 إجمالي المستلم: {user_data['total_in_sy']} ل.س\n"
-            report += f"   📤 إجمالي المدفوع: {user_data['total_out_sy']} ل.س\n\n"
-            
-            report += "💵 *الدولار الأمريكي:*\n"
-            report += f"   💰 الرصيد: *{user_data['balance_usd']}* USD\n"
-            report += f"   📥 إجمالي المستلم: {user_data['total_in_usd']} USD\n"
-            report += f"   📤 إجمالي المدفوع: {user_data['total_out_usd']} USD\n\n"
-            
-            payment_code = user_data.get("payment_code", "")
-            if payment_code:
-                report += f"🔑 *كود استقبال الراتب:*\n`{payment_code}`\n\n"
-            
-            report += f"📝 عدد المعاملات: {len(user_data['transactions'])}\n"
-            report += "─" * 15 + "\n\n"
-            
-            if user_data['transactions']:
-                report += "📋 *آخر 5 معاملات:*\n"
-                for trans in reversed(user_data['transactions'][-5:]):
-                    emoji = "📥" if trans["type"] == "استلام" else "📤"
-                    report += f"{emoji} {trans['type']}: *{trans['amount']} {trans['currency']}*\n"
-                    report += f"   🕐 {trans['time']}\n"
-                    if trans.get('note'):
-                        report += f"   📝 {trans['note']}\n"
-            
-            bot.reply_to(message, report, parse_mode='Markdown')
-            found = True
-            break
-    
-    if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+    bot.reply_to(message, "⚙️ *لوحة التحكم*\nاختر الإجراء المناسب:", parse_mode='Markdown', reply_markup=admin_menu())
 
-@bot.message_handler(commands=['all_transactions'])
-def all_transactions(message):
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
+@bot.message_handler(func=lambda message: message.text == "📋 تقرير موظف")
+def admin_user_report(message):
+    """تقرير موظف معين"""
+    user_states[message.from_user.id] = "admin_waiting_username"
+    bot.reply_to(message, "👤 أدخل اسم المستخدم المراد التقرير عنه:\nمثال: `@أحمد`")
+
+@bot.message_handler(func=lambda message: message.text == "📊 جميع المعاملات")
+def admin_all_transactions(message):
+    """جميع المعاملات"""
     data = load_data()
     if not data:
-        bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
+        bot.reply_to(message, "📭 لا توجد معاملات.")
         return
     
     report = "📋 *جميع المعاملات*\n"
-    report += f"📅 {datetime.now().strftime('%Y-%m-%d')}\n"
     report += "═" * 20 + "\n\n"
     
     for user_id, user_data in data.items():
@@ -809,221 +520,62 @@ def all_transactions(message):
         report += f"👤 *{user_data['username']}*"
         if full_name:
             report += f" ({full_name})"
-        report += f" - {len(user_data['transactions'])} معاملات\n"
-        
+        report += f"\n   📝 {len(user_data['transactions'])} معاملة\n"
         if user_data['transactions']:
-            for trans in user_data['transactions']:
+            for trans in user_data['transactions'][-3:]:
                 emoji = "📥" if trans["type"] == "استلام" else "📤"
-                report += f"   {emoji} {trans['type']}: *{trans['amount']} {trans['currency']}*"
-                report += f" [{trans['time']}]\n"
-                if trans.get('note'):
-                    report += f"      📝 {trans['note']}\n"
-        else:
-            report += "   📭 لا توجد معاملات\n"
-        
+                report += f"   {emoji} {trans['type']}: {trans['amount']} {trans['currency']} [{trans['time']}]\n"
         report += "─" * 10 + "\n"
     
     bot.reply_to(message, report, parse_mode='Markdown')
 
-# --------------------- أوامر التصفير (تصفير الأرصدة فقط - الملف الشخصي محفوظ) ---------------------
+@bot.message_handler(func=lambda message: message.text == "🔄 تصفير الكل")
+def admin_reset_all(message):
+    """تصفير الأرصدة فقط"""
+    user_states[message.from_user.id] = "admin_confirm_reset"
+    bot.reply_to(message, "⚠️ *تأكيد تصفير الكل*\n\nهل أنت متأكد من تصفير جميع الأرصدة؟\n📌 الملفات الشخصية والأكواد محفوظة.\n\nأرسل `نعم` للتأكيد أو `لا` للإلغاء.", parse_mode='Markdown')
 
-@bot.message_handler(commands=['reset'])
-def reset_balances(message):
-    """تصفير الأرصدة فقط - الملف الشخصي والأكواد محفوظة (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    data = load_data()
-    
-    if data:
-        backup_file = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(backup_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        bot.reply_to(message, f"📦 تم حفظ نسخة احتياطية: `{backup_file}`", parse_mode='Markdown')
-    
-    for user_id, user_data in data.items():
-        # تصفير الأرصدة والإحصائيات فقط
-        user_data["balance_sy"] = 0
-        user_data["balance_usd"] = 0
-        user_data["total_in_sy"] = 0
-        user_data["total_out_sy"] = 0
-        user_data["total_in_usd"] = 0
-        user_data["total_out_usd"] = 0
-        user_data["transactions"] = []
-        # ✅ الملف الشخصي (full_name, phone, payment_code) لا يتم حذفه!
-    
-    save_data(data)
-    
-    # عرض عدد الملفات الشخصية المحفوظة
-    profiles_count = sum(1 for u in data.values() if u.get("full_name", ""))
-    codes_count = sum(1 for u in data.values() if u.get("payment_code", ""))
-    
-    bot.reply_to(message, 
-        f"🔄 *تم تصفير الأرصدة بنجاح*\n\n"
-        f"📋 عدد الملفات الشخصية المحفوظة: {profiles_count}\n"
-        f"🔑 عدد الأكواد المحفوظة: {codes_count}\n\n"
-        f"📌 *ملاحظة:* الملفات الشخصية والأكواد **لم تُحذف**",
-        parse_mode='Markdown'
-    )
+@bot.message_handler(func=lambda message: message.text == "🔄 تصفير موظف")
+def admin_reset_user(message):
+    """تصفير موظف معين"""
+    user_states[message.from_user.id] = "admin_waiting_reset_user"
+    bot.reply_to(message, "👤 أدخل اسم المستخدم المراد تصفير رصيده:\nمثال: `@أحمد`")
 
-@bot.message_handler(commands=['reset_user'])
-def reset_user_balance(message):
-    """تصفير رصيد موظف معين فقط - الملف الشخصي محفوظ (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ استخدم: `/reset_user @username`", parse_mode='Markdown')
-        return
-    
-    target_username = parts[1].replace('@', '')
-    
-    data = load_data()
-    found = False
-    
-    for user_id, user_data in data.items():
-        if user_data["username"].lower() == target_username.lower():
-            full_name = user_data.get("full_name", "")
-            phone = user_data.get("phone", "")
-            payment_code = user_data.get("payment_code", "")
-            
-            # تصفير الأرصدة فقط
-            user_data["balance_sy"] = 0
-            user_data["balance_usd"] = 0
-            user_data["total_in_sy"] = 0
-            user_data["total_out_sy"] = 0
-            user_data["total_in_usd"] = 0
-            user_data["total_out_usd"] = 0
-            user_data["transactions"] = []
-            # ✅ الملف الشخصي لا يتم حذفه!
-            
-            save_data(data)
-            found = True
-            
-            bot.reply_to(message, 
-                f"✅ *تم تصفير رصيد {target_username}*\n\n"
-                f"👤 الاسم: {full_name or 'غير مسجل'}\n"
-                f"📱 الهاتف: {phone or 'غير مسجل'}\n"
-                f"🔑 الكود: `{payment_code or 'غير مسجل'}`\n\n"
-                f"📌 *ملاحظة:* الملف الشخصي **لم يُحذف**",
-                parse_mode='Markdown'
-            )
-            break
-    
-    if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+@bot.message_handler(func=lambda message: message.text == "🔙 رجوع")
+def go_back(message):
+    """العودة للقائمة الرئيسية"""
+    bot.reply_to(message, "🔙 تم العودة للقائمة الرئيسية", reply_markup=main_menu())
 
-@bot.message_handler(commands=['reset_confirm'])
-def reset_confirm(message):
-    """تأكيد تصفير الأرصدة فقط (للمشرفين فقط)"""
-    if message.chat.id != GROUP_ID:
-        return
-    
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
-    
-    data = load_data()
-    if not data:
-        bot.reply_to(message, "📭 لا توجد بيانات لتصفيرها.")
-        return
-    
-    summary = "📊 *ملخص البيانات قبل التصفير*\n"
-    summary += "═" * 15 + "\n\n"
-    
-    total_balance_sy = 0
-    total_balance_usd = 0
-    profiles_count = 0
-    codes_count = 0
-    
-    for user_id, user_data in data.items():
-        full_name = user_data.get("full_name", "")
-        summary += f"👤 {user_data['username']}"
-        if full_name:
-            summary += f" ({full_name})"
-        summary += ":\n"
-        summary += f"   🇸🇾 الرصيد: {user_data['balance_sy']} ل.س\n"
-        summary += f"   💵 الرصيد: {user_data['balance_usd']} USD\n"
-        if user_data.get("payment_code", ""):
-            codes_count += 1
-        if full_name:
-            profiles_count += 1
-        
-        total_balance_sy += user_data['balance_sy']
-        total_balance_usd += user_data['balance_usd']
-    
-    summary += f"\n💰 إجمالي أرصدة الليرة: *{total_balance_sy}* ل.س"
-    summary += f"\n💰 إجمالي أرصدة الدولار: *{total_balance_usd}* USD"
-    summary += f"\n📋 عدد الملفات الشخصية: *{profiles_count}*"
-    summary += f"\n🔑 عدد الأكواد: *{codes_count}*"
-    summary += "\n\n⚠️ *هل أنت متأكد؟* استخدم `/reset` للتأكيد.\n"
-    summary += "📌 ملاحظة: **سيتم تصفير الأرصدة فقط**، الملفات الشخصية والأكواد **محفوظة**."
-    
-    bot.reply_to(message, summary, parse_mode='Markdown')
+# --------------------- معالجة الكولباك (الأزرار التفاعلية) ---------------------
 
-@bot.message_handler(commands=['archive'])
-def show_archive(message):
-    if message.chat.id != GROUP_ID:
-        return
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    if call.data == "currency_sy":
+        user_states[call.from_user.id] = user_states.get(call.from_user.id, "").replace("currency", "sy")
+        bot.answer_callback_query(call.id, "✅ تم اختيار الليرة السورية")
+        bot.edit_message_text("🇸🇾 تم اختيار الليرة السورية.\nأرسل المبلغ:", call.message.chat.id, call.message.message_id)
     
-    try:
-        chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
-        if chat_member.status not in ["administrator", "creator"]:
-            bot.reply_to(message, "⛔ هذا الأمر للمشرفين فقط.")
-            return
-    except:
-        bot.reply_to(message, "⛔ يرجى التأكد من صلاحياتك.")
-        return
+    elif call.data == "currency_usd":
+        user_states[call.from_user.id] = user_states.get(call.from_user.id, "").replace("currency", "usd")
+        bot.answer_callback_query(call.id, "✅ تم اختيار الدولار")
+        bot.edit_message_text("💵 تم اختيار الدولار الأمريكي.\nأرسل المبلغ:", call.message.chat.id, call.message.message_id)
     
-    archive_files = [f for f in os.listdir('.') if f.startswith('archive_') and f.endswith('.json')]
-    
-    if not archive_files:
-        bot.reply_to(message, "📭 لا توجد ملفات أرشيف.")
-        return
-    
-    files_text = "📁 *ملفات الأرشيف المتاحة*\n"
-    files_text += "═" * 15 + "\n\n"
-    
-    for file in sorted(archive_files, reverse=True):
-        size = os.path.getsize(file) / 1024
-        files_text += f"📄 `{file}` ({size:.1f} KB)\n"
-    
-    bot.reply_to(message, files_text, parse_mode='Markdown')
+    elif call.data == "cancel":
+        user_states[call.from_user.id] = ""
+        bot.answer_callback_query(call.id, "❌ تم الإلغاء")
+        bot.edit_message_text("❌ تم الإلغاء.", call.message.chat.id, call.message.message_id)
 
 # --------------------- معالجة الرسائل النصية ---------------------
 
 @bot.message_handler(func=lambda message: True)
-def handle_message(message):
+def handle_text(message):
     if message.chat.id != GROUP_ID:
         return
     
     text = message.text.strip()
     user = message.from_user
     username = user.username or user.first_name
+    user_id = user.id
     
     # --------------------- معالجة طلب "رابط @موظف" أو "كود @موظف" ---------------------
     if text.lower().startswith("رابط") or text.lower().startswith("كود"):
@@ -1031,124 +583,236 @@ def handle_message(message):
         if len(parts) >= 2:
             target_username = parts[1].replace('@', '')
             data = load_data()
-            found = False
-            for user_id, user_data in data.items():
+            for user_id_data, user_data in data.items():
                 if user_data["username"].lower() == target_username.lower():
-                    found = True
                     payment_code = user_data.get("payment_code", "")
                     if payment_code:
                         bot.reply_to(message,
-                            f"🔑 *كود استقبال الراتب لـ {target_username}*\n\n"
-                            f"`{payment_code}`",
+                            f"🔑 *كود {target_username}*\n\n`{payment_code}`",
                             parse_mode='Markdown'
                         )
                     else:
-                        bot.reply_to(message, f"📭 لا يوجد كود استقبال مسجل لـ {target_username}")
-                    break
-            if not found:
-                bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+                        bot.reply_to(message, f"📭 لا يوجد كود لـ {target_username}")
+                    return
+            bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
         return
     
-    # --------------------- معالجة المبالغ ---------------------
-    amount = None
-    currency = "sy"
-    note = ""
+    # --------------------- معالجة حالة المستخدم ---------------------
+    state = user_states.get(user_id, "")
     
-    if text.startswith('+') or text.startswith('-'):
+    # معالجة الإيداع
+    if state == "waiting_deposit_amount" or state == "waiting_deposit_sy" or state == "waiting_deposit_usd":
         try:
-            parts = text.split()
-            if '$' in parts[0] or 'دولار' in text:
-                currency = "usd"
-                amount_str = parts[0].replace('$', '').replace('+', '').replace('-', '')
-                amount = -float(amount_str) if '-' in parts[0] else float(amount_str)
-            else:
-                amount = float(parts[0])
-            if len(parts) > 1:
-                note = ' '.join(parts[1:])
-        except:
-            pass
-    
-    elif "استلام" in text or "دفع" in text:
-        try:
-            parts = text.split()
-            for i, part in enumerate(parts):
-                if part in ["استلام", "دفع"]:
-                    if i + 1 < len(parts):
-                        amount_str = parts[i + 1]
-                        if '$' in amount_str or 'دولار' in text:
-                            currency = "usd"
-                            amount_str = amount_str.replace('$', '')
-                        amount = float(amount_str)
-                        if part == "دفع":
-                            amount = -amount
-                        if len(parts) > i + 2:
-                            note = ' '.join(parts[i+2:])
-                        break
-        except:
-            pass
-    
-    elif '$' in text:
-        try:
-            match = re.search(r'([+-]?\d+\.?\d*)\s*\$', text)
-            if match:
-                amount = float(match.group(1))
-                currency = "usd"
-                parts = text.split()
-                for i, part in enumerate(parts):
-                    if '$' in part and len(parts) > i + 1:
-                        note = ' '.join(parts[i+1:])
-                        break
-        except:
-            pass
-    
-    if amount is None or amount == 0:
-        return
-    
-    try:
-        new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, username = add_transaction(
-            user.id, username, amount, currency, note
-        )
-        
-        reply = f"{emoji} *تم تسجيل العملية بنجاح*\n\n"
-        reply += f"👤 {username}\n"
-        reply += f"📌 {trans_type}: *{trans_amount} {currency_symbol}*\n"
-        reply += f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*\n"
-        
-        if note:
-            reply += f"📝 ملاحظة: {note}\n"
-        
-        reply += "\n" + "─" * 15 + "\n"
-        reply += "📊 *تقريرك السريع:*\n"
-        reply += f"📥 إجمالي المستلم: {total_in} {currency_symbol}\n"
-        reply += f"📤 إجمالي المدفوع: {total_out} {currency_symbol}\n"
-        
-        user_data = get_user_full_report(user.id)
-        if user_data:
-            if currency == "sy":
-                other_balance = user_data["balance_usd"]
-                other_symbol = "💵 USD"
-            else:
-                other_balance = user_data["balance_sy"]
-                other_symbol = "🇸🇾 ل.س"
+            amount_str = text.replace('$', '').strip()
+            amount = float(amount_str)
+            currency = "usd" if '$' in text else "sy"
             
-            if other_balance != 0:
-                reply += f"\n💡 *رصيدك بالعملة الأخرى:* {other_balance} {other_symbol}"
+            if amount <= 0:
+                bot.reply_to(message, "⚠️ المبلغ يجب أن يكون أكبر من صفر.")
+                return
+            
+            new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, username = add_transaction(
+                user.id, username, amount, currency, ""
+            )
+            
+            bot.reply_to(message,
+                f"✅ *تم الإيداع*\n\n"
+                f"👤 {username}\n"
+                f"📥 المبلغ: *{trans_amount} {currency_symbol}*\n"
+                f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*",
+                parse_mode='Markdown'
+            )
+            user_states[user_id] = ""
+            
+        except ValueError:
+            bot.reply_to(message, "⚠️ يرجى إدخال رقم صحيح.")
+        return
+    
+    # معالجة السحب
+    if state == "waiting_withdraw_amount" or state == "waiting_withdraw_sy" or state == "waiting_withdraw_usd":
+        try:
+            amount_str = text.replace('$', '').strip()
+            amount = float(amount_str)
+            currency = "usd" if '$' in text else "sy"
+            
+            if amount <= 0:
+                bot.reply_to(message, "⚠️ المبلغ يجب أن يكون أكبر من صفر.")
+                return
+            
+            new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, username = add_transaction(
+                user.id, username, -amount, currency, ""
+            )
+            
+            bot.reply_to(message,
+                f"✅ *تم السحب*\n\n"
+                f"👤 {username}\n"
+                f"📤 المبلغ: *{trans_amount} {currency_symbol}*\n"
+                f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*",
+                parse_mode='Markdown'
+            )
+            user_states[user_id] = ""
+            
+        except ValueError:
+            bot.reply_to(message, "⚠️ يرجى إدخال رقم صحيح.")
+        return
+    
+    # معالجة تحديث الملف الشخصي - الاسم
+    if state == "waiting_profile_name":
+        user_states[user_id] = f"waiting_profile_phone|{text}"
+        bot.reply_to(message, "📱 أرسل رقم الهاتف:\nمثال: `0912345678`", parse_mode='Markdown')
+        return
+    
+    if state.startswith("waiting_profile_phone|"):
+        name = state.split("|")[1]
+        user_states[user_id] = f"waiting_profile_code|{name}|{text}"
+        bot.reply_to(message, "🔑 أرسل كود الاستقبال:\nمثال: `8324217cd72dae144243c7010390d636`", parse_mode='Markdown')
+        return
+    
+    if state.startswith("waiting_profile_code|"):
+        parts = state.split("|")
+        name = parts[1]
+        phone = parts[2]
+        code = text.strip()
         
-        bot.reply_to(message, reply, parse_mode='Markdown')
+        data = load_data()
+        user_id_str = str(user.id)
         
-    except Exception as e:
-        bot.reply_to(message, f"⚠️ حدث خطأ: {str(e)}")
+        if user_id_str not in data:
+            data[user_id_str] = {
+                "username": username,
+                "full_name": name,
+                "phone": phone,
+                "payment_code": code,
+                "balance_sy": 0,
+                "balance_usd": 0,
+                "total_in_sy": 0,
+                "total_out_sy": 0,
+                "total_in_usd": 0,
+                "total_out_usd": 0,
+                "transactions": []
+            }
+        else:
+            data[user_id_str]["full_name"] = name
+            data[user_id_str]["phone"] = phone
+            data[user_id_str]["payment_code"] = code
+        
+        save_data(data)
+        user_states[user_id] = ""
+        
+        bot.reply_to(message,
+            f"✅ *تم تحديث الملف الشخصي*\n\n"
+            f"👤 الاسم: {name}\n"
+            f"📱 الهاتف: {phone}\n"
+            f"🔑 الكود: `{code}`",
+            parse_mode='Markdown',
+            reply_markup=main_menu()
+        )
+        return
+    
+    # معالجة تقرير موظف (للمشرفين)
+    if state == "admin_waiting_username":
+        target_username = text.replace('@', '')
+        data = load_data()
+        found = False
+        
+        for user_id_data, user_data in data.items():
+            if user_data["username"].lower() == target_username.lower():
+                found = True
+                full_name = user_data.get("full_name", "")
+                phone = user_data.get("phone", "")
+                
+                report = f"📊 *تقرير {user_data['username']}*\n"
+                report += "═" * 20 + "\n\n"
+                if full_name:
+                    report += f"👤 {full_name}\n"
+                if phone:
+                    report += f"📱 {phone}\n"
+                report += f"💰 رصيد: {user_data['balance_sy']} ل.س"
+                if user_data['balance_usd'] != 0:
+                    report += f" / {user_data['balance_usd']} USD"
+                report += f"\n📥 استلام: {user_data['total_in_sy']} ل.س"
+                if user_data['total_in_usd'] > 0:
+                    report += f" / {user_data['total_in_usd']} USD"
+                report += f"\n📤 دفع: {user_data['total_out_sy']} ل.س"
+                if user_data['total_out_usd'] > 0:
+                    report += f" / {user_data['total_out_usd']} USD"
+                report += f"\n📝 معاملات: {len(user_data['transactions'])}"
+                
+                bot.reply_to(message, report, parse_mode='Markdown')
+                user_states[user_id] = ""
+                break
+        
+        if not found:
+            bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+        return
+    
+    # معالجة تصفير موظف (للمشرفين)
+    if state == "admin_waiting_reset_user":
+        target_username = text.replace('@', '')
+        data = load_data()
+        found = False
+        
+        for user_id_data, user_data in data.items():
+            if user_data["username"].lower() == target_username.lower():
+                full_name = user_data.get("full_name", "")
+                payment_code = user_data.get("payment_code", "")
+                
+                user_data["balance_sy"] = 0
+                user_data["balance_usd"] = 0
+                user_data["total_in_sy"] = 0
+                user_data["total_out_sy"] = 0
+                user_data["total_in_usd"] = 0
+                user_data["total_out_usd"] = 0
+                user_data["transactions"] = []
+                
+                save_data(data)
+                found = True
+                user_states[user_id] = ""
+                
+                bot.reply_to(message,
+                    f"✅ *تم تصفير رصيد {target_username}*\n"
+                    f"👤 الاسم: {full_name or 'غير مسجل'}\n"
+                    f"🔑 الكود: `{payment_code or 'غير مسجل'}`",
+                    parse_mode='Markdown'
+                )
+                break
+        
+        if not found:
+            bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
+        return
+    
+    # معالجة تأكيد تصفير الكل
+    if state == "admin_confirm_reset":
+        if text == "نعم" or text == "yes":
+            data = load_data()
+            for user_id_data, user_data in data.items():
+                user_data["balance_sy"] = 0
+                user_data["balance_usd"] = 0
+                user_data["total_in_sy"] = 0
+                user_data["total_out_sy"] = 0
+                user_data["total_in_usd"] = 0
+                user_data["total_out_usd"] = 0
+                user_data["transactions"] = []
+            
+            save_data(data)
+            user_states[user_id] = ""
+            bot.reply_to(message, "🔄 *تم تصفير جميع الأرصدة*\n📌 الملفات الشخصية والأكواد محفوظة.", parse_mode='Markdown')
+        
+        elif text == "لا" or text == "no":
+            user_states[user_id] = ""
+            bot.reply_to(message, "❌ تم إلغاء التصفير.")
+        else:
+            bot.reply_to(message, "⚠️ أرسل `نعم` للتأكيد أو `لا` للإلغاء.", parse_mode='Markdown')
+        return
 
 # --------------------- تشغيل البوت ---------------------
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة (مع الملفات الشخصية - تصفير الأرصدة فقط)")
+    print("🤖 بوت تتبع الأرصدة (نسخة الأزرار المتطورة)")
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print("🔄 البوت يعمل مع إعادة تشغيل تلقائي...")
-    print("📋 الملفات الشخصية محفوظة ولا تُحذف عند التصفير")
-    print("📌 التصفير يمسح الأرصدة فقط - الملفات الشخصية والأكواد محفوظة")
     print("=" * 40)
     
     keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
