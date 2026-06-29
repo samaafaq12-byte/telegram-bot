@@ -76,7 +76,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
             "username": username,
             "full_name": "",
             "phone": "",
-            "payment_code": "",
+            "shamcash_code": "",  # كود استقبال الشام كاش
             "balance_sy": 0,
             "balance_usd": 0,
             "total_in_sy": 0,
@@ -144,7 +144,7 @@ def main_menu():
     btn3 = KeyboardButton("💰 رصيدي")
     btn4 = KeyboardButton("📊 تقارير")
     btn5 = KeyboardButton("👤 ملفي الشخصي")
-    btn6 = KeyboardButton("🔑 كودي")
+    btn6 = KeyboardButton("🔑 كود الشام كاش")
     btn7 = KeyboardButton("📋 قائمة الأكواد")
     btn8 = KeyboardButton("⚙️ إدارة")
     markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8)
@@ -190,13 +190,13 @@ def start(message):
     """رسالة ترحيبية مع أزرار"""
     bot.reply_to(message, 
         "👋 *مرحباً بك في بوت تتبع الأرصدة*\n\n"
-        "📌 استخدم الأزرار أدناه للتنقل:\n"
+        "📌 *الأزرار المتاحة:*\n"
         "• ➕ إيداع - لإضافة مبلغ مستلم\n"
         "• ➖ سحب - لخصم مبلغ مدفوع\n"
         "• 💰 رصيدي - لعرض رصيدك\n"
         "• 📊 تقارير - لعرض التقارير\n"
-        "• 👤 ملفي الشخصي - لعرض وتعديل ملفك\n"
-        "• 🔑 كودي - لعرض كود الاستقبال\n"
+        "• 👤 ملفي الشخصي - لتسجيل أو تحديث بياناتك\n"
+        "• 🔑 كود الشام كاش - لعرض كود الشام كاش الخاص بك\n"
         "• 📋 قائمة الأكواد - لعرض جميع الأكواد (للمشرفين)\n"
         "• ⚙️ إدارة - لأوامر المشرفين",
         parse_mode='Markdown',
@@ -375,7 +375,7 @@ def my_profile_menu(message):
     """قائمة الملف الشخصي"""
     markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn1 = KeyboardButton("📋 عرض ملفي")
-    btn2 = KeyboardButton("✏️ تحديث ملفي")
+    btn2 = KeyboardButton("✏️ تسجيل / تحديث")
     btn3 = KeyboardButton("🔙 رجوع")
     markup.add(btn1, btn2, btn3)
     bot.reply_to(message, "👤 *الملف الشخصي*\nاختر الإجراء المناسب:", parse_mode='Markdown', reply_markup=markup)
@@ -387,15 +387,15 @@ def show_my_profile(message):
     user_id_str = str(message.from_user.id)
     
     if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد بيانات لك.")
+        bot.reply_to(message, "📭 لا توجد بيانات لك. استخدم ✏️ تسجيل / تحديث لإضافة بياناتك.")
         return
     
     user_data = data[user_id_str]
     profile = f"📋 *الملف الشخصي*\n"
     profile += "═" * 20 + "\n\n"
-    profile += f"👤 الاسم: {user_data.get('full_name', 'غير مسجل')}\n"
-    profile += f"📱 الهاتف: {user_data.get('phone', 'غير مسجل')}\n"
-    profile += f"🔑 الكود: {user_data.get('payment_code', 'غير مسجل')}\n"
+    profile += f"👤 الاسم الثلاثي: {user_data.get('full_name', 'غير مسجل')}\n"
+    profile += f"📱 رقم الهاتف: {user_data.get('phone', 'غير مسجل')}\n"
+    profile += f"🔑 كود الشام كاش: {user_data.get('shamcash_code', 'غير مسجل')}\n"
     profile += f"💰 رصيد: {user_data['balance_sy']} ل.س"
     if user_data['balance_usd'] != 0:
         profile += f" / {user_data['balance_usd']} USD"
@@ -409,47 +409,47 @@ def show_my_profile(message):
     
     bot.reply_to(message, profile, parse_mode='Markdown')
 
-@bot.message_handler(func=lambda message: message.text == "✏️ تحديث ملفي")
-def update_profile(message):
-    """تحديث الملف الشخصي"""
-    user_states[message.from_user.id] = "waiting_profile_name"
+@bot.message_handler(func=lambda message: message.text == "✏️ تسجيل / تحديث")
+def update_profile_start(message):
+    """بدء تسجيل الملف الشخصي"""
+    user_states[message.from_user.id] = "waiting_full_name"
     bot.reply_to(message, 
-        "✏️ *تحديث الملف الشخصي*\n\n"
-        "أرسل الاسم الثلاثي:\n"
+        "✏️ *تسجيل / تحديث الملف الشخصي*\n\n"
+        "📌 *الرجاء إدخال الاسم الثلاثي:*\n"
         "مثال: `أحمد محمد علي`",
         parse_mode='Markdown'
     )
 
-@bot.message_handler(func=lambda message: message.text == "🔑 كودي")
-def my_code(message):
-    """عرض كود الاستقبال"""
+@bot.message_handler(func=lambda message: message.text == "🔑 كود الشام كاش")
+def my_shamcash_code(message):
+    """عرض كود الشام كاش"""
     data = load_data()
     user_id_str = str(message.from_user.id)
     
     if user_id_str not in data:
-        bot.reply_to(message, "📭 لا توجد بيانات لك.")
+        bot.reply_to(message, "📭 لا توجد بيانات لك. استخدم ✏️ تسجيل / تحديث لإضافة بياناتك.")
         return
     
     user_data = data[user_id_str]
-    payment_code = user_data.get("payment_code", "")
+    shamcash_code = user_data.get("shamcash_code", "")
     
-    if payment_code:
+    if shamcash_code:
         bot.reply_to(message,
-            f"🔑 *كود استقبال الراتب*\n\n"
-            f"`{payment_code}`",
+            f"🔑 *كود الشام كاش الخاص بك*\n\n"
+            f"`{shamcash_code}`\n\n"
+            f"📌 يمكنك مشاركة هذا الكود لاستقبال المدفوعات.",
             parse_mode='Markdown'
         )
     else:
         bot.reply_to(message, 
-            "📭 لا يوجد كود استقبال مسجل.\n\n"
-            "استخدم ✏️ تحديث ملفي لإضافة كودك.",
+            "📭 لا يوجد كود شام كاش مسجل.\n\n"
+            "💡 استخدم ✏️ تسجيل / تحديث لإضافة كود الشام كاش الخاص بك.",
             reply_markup=main_menu()
         )
 
 @bot.message_handler(func=lambda message: message.text == "📋 قائمة الأكواد")
 def list_codes(message):
     """عرض قائمة الأكواد (للمشرفين)"""
-    # التحقق من صلاحية المشرف
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -462,23 +462,25 @@ def list_codes(message):
     data = load_data()
     codes_list = []
     for user_id, user_data in data.items():
-        payment_code = user_data.get("payment_code", "")
-        if payment_code:
+        shamcash_code = user_data.get("shamcash_code", "")
+        if shamcash_code:
             codes_list.append({
                 "username": user_data["username"],
                 "full_name": user_data.get("full_name", "غير مسجل"),
-                "code": payment_code
+                "phone": user_data.get("phone", "غير مسجل"),
+                "code": shamcash_code
             })
     
     if not codes_list:
-        bot.reply_to(message, "📭 لا توجد أكواد مسجلة.")
+        bot.reply_to(message, "📭 لا توجد أكواد شام كاش مسجلة.")
         return
     
-    report = "📋 *قائمة الأكواد*\n"
+    report = "📋 *قائمة أكواد الشام كاش*\n"
     report += "═" * 20 + "\n\n"
     for item in codes_list:
         report += f"👤 {item['username']}\n"
         report += f"   الاسم: {item['full_name']}\n"
+        report += f"   📱 هاتف: {item['phone']}\n"
         report += f"   🔑 `{item['code']}`\n"
         report += "─" * 10 + "\n"
     
@@ -585,22 +587,77 @@ def handle_text(message):
             data = load_data()
             for user_id_data, user_data in data.items():
                 if user_data["username"].lower() == target_username.lower():
-                    payment_code = user_data.get("payment_code", "")
-                    if payment_code:
+                    shamcash_code = user_data.get("shamcash_code", "")
+                    if shamcash_code:
                         bot.reply_to(message,
-                            f"🔑 *كود {target_username}*\n\n`{payment_code}`",
+                            f"🔑 *كود الشام كاش لـ {target_username}*\n\n`{shamcash_code}`",
                             parse_mode='Markdown'
                         )
                     else:
-                        bot.reply_to(message, f"📭 لا يوجد كود لـ {target_username}")
+                        bot.reply_to(message, f"📭 لا يوجد كود شام كاش لـ {target_username}")
                     return
             bot.reply_to(message, f"❌ لم يتم العثور على {target_username}")
         return
     
+    # --------------------- معالجة المبالغ المكتوبة يدوياً ---------------------
+    amount = None
+    currency = "sy"
+    note = ""
+    
+    if text.startswith('+') or text.startswith('-'):
+        try:
+            parts = text.split()
+            if '$' in parts[0] or 'دولار' in text:
+                currency = "usd"
+                amount_str = parts[0].replace('$', '').replace('+', '').replace('-', '')
+                amount = -float(amount_str) if '-' in parts[0] else float(amount_str)
+            else:
+                amount = float(parts[0])
+            if len(parts) > 1:
+                note = ' '.join(parts[1:])
+        except:
+            pass
+    
+    elif "استلام" in text or "دفع" in text:
+        try:
+            parts = text.split()
+            for i, part in enumerate(parts):
+                if part in ["استلام", "دفع"]:
+                    if i + 1 < len(parts):
+                        amount_str = parts[i + 1]
+                        if '$' in amount_str or 'دولار' in text:
+                            currency = "usd"
+                            amount_str = amount_str.replace('$', '')
+                        amount = float(amount_str)
+                        if part == "دفع":
+                            amount = -amount
+                        if len(parts) > i + 2:
+                            note = ' '.join(parts[i+2:])
+                        break
+        except:
+            pass
+    
+    if amount is not None and amount != 0:
+        try:
+            new_balance, trans_amount, trans_type, emoji, currency_symbol, total_in, total_out, username = add_transaction(
+                user.id, username, amount, currency, note
+            )
+            
+            bot.reply_to(message,
+                f"{emoji} *تم تسجيل العملية*\n\n"
+                f"👤 {username}\n"
+                f"📌 {trans_type}: *{trans_amount} {currency_symbol}*\n"
+                f"💰 الرصيد: *{new_balance} {currency_symbol}*",
+                parse_mode='Markdown'
+            )
+            return
+        except:
+            pass
+    
     # --------------------- معالجة حالة المستخدم ---------------------
     state = user_states.get(user_id, "")
     
-    # معالجة الإيداع
+    # معالجة الإيداع عبر الأزرار
     if state == "waiting_deposit_amount" or state == "waiting_deposit_sy" or state == "waiting_deposit_usd":
         try:
             amount_str = text.replace('$', '').strip()
@@ -619,7 +676,7 @@ def handle_text(message):
                 f"✅ *تم الإيداع*\n\n"
                 f"👤 {username}\n"
                 f"📥 المبلغ: *{trans_amount} {currency_symbol}*\n"
-                f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*",
+                f"💰 الرصيد: *{new_balance} {currency_symbol}*",
                 parse_mode='Markdown'
             )
             user_states[user_id] = ""
@@ -628,7 +685,7 @@ def handle_text(message):
             bot.reply_to(message, "⚠️ يرجى إدخال رقم صحيح.")
         return
     
-    # معالجة السحب
+    # معالجة السحب عبر الأزرار
     if state == "waiting_withdraw_amount" or state == "waiting_withdraw_sy" or state == "waiting_withdraw_usd":
         try:
             amount_str = text.replace('$', '').strip()
@@ -647,7 +704,7 @@ def handle_text(message):
                 f"✅ *تم السحب*\n\n"
                 f"👤 {username}\n"
                 f"📤 المبلغ: *{trans_amount} {currency_symbol}*\n"
-                f"💰 الرصيد الحالي: *{new_balance} {currency_symbol}*",
+                f"💰 الرصيد: *{new_balance} {currency_symbol}*",
                 parse_mode='Markdown'
             )
             user_states[user_id] = ""
@@ -656,23 +713,42 @@ def handle_text(message):
             bot.reply_to(message, "⚠️ يرجى إدخال رقم صحيح.")
         return
     
-    # معالجة تحديث الملف الشخصي - الاسم
-    if state == "waiting_profile_name":
-        user_states[user_id] = f"waiting_profile_phone|{text}"
-        bot.reply_to(message, "📱 أرسل رقم الهاتف:\nمثال: `0912345678`", parse_mode='Markdown')
+    # معالجة تحديث الملف الشخصي - الاسم الثلاثي
+    if state == "waiting_full_name":
+        if len(text.split()) < 2:
+            bot.reply_to(message, "⚠️ الرجاء إدخال الاسم الثلاثي كاملاً (اسم + أب + جد).")
+            return
+        user_states[user_id] = f"waiting_phone|{text}"
+        bot.reply_to(message, 
+            "📱 *أدخل رقم الهاتف:*\n"
+            "مثال: `0912345678`",
+            parse_mode='Markdown'
+        )
         return
     
-    if state.startswith("waiting_profile_phone|"):
+    if state.startswith("waiting_phone|"):
         name = state.split("|")[1]
-        user_states[user_id] = f"waiting_profile_code|{name}|{text}"
-        bot.reply_to(message, "🔑 أرسل كود الاستقبال:\nمثال: `8324217cd72dae144243c7010390d636`", parse_mode='Markdown')
+        phone = text.strip()
+        if not phone.isdigit():
+            bot.reply_to(message, "⚠️ رقم الهاتف يجب أن يحتوي على أرقام فقط.")
+            return
+        user_states[user_id] = f"waiting_shamcash|{name}|{phone}"
+        bot.reply_to(message, 
+            "🔑 *أدخل كود الشام كاش الخاص بك:*\n"
+            "مثال: `8324217cd72dae144243c7010390d636`",
+            parse_mode='Markdown'
+        )
         return
     
-    if state.startswith("waiting_profile_code|"):
+    if state.startswith("waiting_shamcash|"):
         parts = state.split("|")
         name = parts[1]
         phone = parts[2]
-        code = text.strip()
+        shamcash_code = text.strip()
+        
+        if len(shamcash_code) < 5:
+            bot.reply_to(message, "⚠️ كود الشام كاش قصير جداً. تأكد من إدخاله بشكل صحيح.")
+            return
         
         data = load_data()
         user_id_str = str(user.id)
@@ -682,7 +758,7 @@ def handle_text(message):
                 "username": username,
                 "full_name": name,
                 "phone": phone,
-                "payment_code": code,
+                "shamcash_code": shamcash_code,
                 "balance_sy": 0,
                 "balance_usd": 0,
                 "total_in_sy": 0,
@@ -694,16 +770,16 @@ def handle_text(message):
         else:
             data[user_id_str]["full_name"] = name
             data[user_id_str]["phone"] = phone
-            data[user_id_str]["payment_code"] = code
+            data[user_id_str]["shamcash_code"] = shamcash_code
         
         save_data(data)
         user_states[user_id] = ""
         
         bot.reply_to(message,
-            f"✅ *تم تحديث الملف الشخصي*\n\n"
-            f"👤 الاسم: {name}\n"
-            f"📱 الهاتف: {phone}\n"
-            f"🔑 الكود: `{code}`",
+            f"✅ *تم تسجيل الملف الشخصي بنجاح*\n\n"
+            f"👤 الاسم الثلاثي: {name}\n"
+            f"📱 رقم الهاتف: {phone}\n"
+            f"🔑 كود الشام كاش: `{shamcash_code}`",
             parse_mode='Markdown',
             reply_markup=main_menu()
         )
@@ -720,13 +796,16 @@ def handle_text(message):
                 found = True
                 full_name = user_data.get("full_name", "")
                 phone = user_data.get("phone", "")
+                shamcash_code = user_data.get("shamcash_code", "")
                 
                 report = f"📊 *تقرير {user_data['username']}*\n"
                 report += "═" * 20 + "\n\n"
                 if full_name:
-                    report += f"👤 {full_name}\n"
+                    report += f"👤 الاسم: {full_name}\n"
                 if phone:
-                    report += f"📱 {phone}\n"
+                    report += f"📱 الهاتف: {phone}\n"
+                if shamcash_code:
+                    report += f"🔑 الشام كاش: `{shamcash_code}`\n"
                 report += f"💰 رصيد: {user_data['balance_sy']} ل.س"
                 if user_data['balance_usd'] != 0:
                     report += f" / {user_data['balance_usd']} USD"
@@ -755,7 +834,7 @@ def handle_text(message):
         for user_id_data, user_data in data.items():
             if user_data["username"].lower() == target_username.lower():
                 full_name = user_data.get("full_name", "")
-                payment_code = user_data.get("payment_code", "")
+                shamcash_code = user_data.get("shamcash_code", "")
                 
                 user_data["balance_sy"] = 0
                 user_data["balance_usd"] = 0
@@ -772,7 +851,7 @@ def handle_text(message):
                 bot.reply_to(message,
                     f"✅ *تم تصفير رصيد {target_username}*\n"
                     f"👤 الاسم: {full_name or 'غير مسجل'}\n"
-                    f"🔑 الكود: `{payment_code or 'غير مسجل'}`",
+                    f"🔑 الشام كاش: `{shamcash_code or 'غير مسجل'}`",
                     parse_mode='Markdown'
                 )
                 break
@@ -796,7 +875,7 @@ def handle_text(message):
             
             save_data(data)
             user_states[user_id] = ""
-            bot.reply_to(message, "🔄 *تم تصفير جميع الأرصدة*\n📌 الملفات الشخصية والأكواد محفوظة.", parse_mode='Markdown')
+            bot.reply_to(message, "🔄 *تم تصفير جميع الأرصدة*\n📌 الملفات الشخصية وأكواد الشام كاش محفوظة.", parse_mode='Markdown')
         
         elif text == "لا" or text == "no":
             user_states[user_id] = ""
@@ -813,6 +892,7 @@ if __name__ == "__main__":
     print("=" * 40)
     print(f"✅ معرف المجموعة: {GROUP_ID}")
     print("🔄 البوت يعمل مع إعادة تشغيل تلقائي...")
+    print("📋 الملفات الشخصية وأكواد الشام كاش محفوظة")
     print("=" * 40)
     
     keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
