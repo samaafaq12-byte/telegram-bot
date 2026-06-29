@@ -76,7 +76,7 @@ def add_transaction(user_id, username, amount, currency, note=""):
             "username": username,
             "full_name": "",
             "phone": "",
-            "shamcash_code": "",  # كود استقبال الشام كاش
+            "shamcash_code": "",
             "balance_sy": 0,
             "balance_usd": 0,
             "total_in_sy": 0,
@@ -393,7 +393,7 @@ def show_my_profile(message):
     user_data = data[user_id_str]
     profile = f"📋 *الملف الشخصي*\n"
     profile += "═" * 20 + "\n\n"
-    profile += f"👤 الاسم الثلاثي: {user_data.get('full_name', 'غير مسجل')}\n"
+    profile += f"👤 الاسم: {user_data.get('full_name', 'غير مسجل')}\n"
     profile += f"📱 رقم الهاتف: {user_data.get('phone', 'غير مسجل')}\n"
     profile += f"🔑 كود الشام كاش: {user_data.get('shamcash_code', 'غير مسجل')}\n"
     profile += f"💰 رصيد: {user_data['balance_sy']} ل.س"
@@ -415,8 +415,9 @@ def update_profile_start(message):
     user_states[message.from_user.id] = "waiting_full_name"
     bot.reply_to(message, 
         "✏️ *تسجيل / تحديث الملف الشخصي*\n\n"
-        "📌 *الرجاء إدخال الاسم الثلاثي:*\n"
-        "مثال: `أحمد محمد علي`",
+        "📌 *الرجاء إدخال الاسم:*\n"
+        "(يمكنك إدخال اسم واحد فقط بالعربية أو الإنجليزية)\n"
+        "مثال: `أحمد` أو `Ahmed`",
         parse_mode='Markdown'
     )
 
@@ -713,12 +714,19 @@ def handle_text(message):
             bot.reply_to(message, "⚠️ يرجى إدخال رقم صحيح.")
         return
     
-    # معالجة تحديث الملف الشخصي - الاسم الثلاثي
+    # معالجة تحديث الملف الشخصي - الاسم (اسم واحد فقط)
     if state == "waiting_full_name":
-        if len(text.split()) < 2:
-            bot.reply_to(message, "⚠️ الرجاء إدخال الاسم الثلاثي كاملاً (اسم + أب + جد).")
+        # قبول أي اسم (عربي أو إنجليزي) بشرط ألا يكون فارغاً أو أرقام فقط
+        if len(text.strip()) < 2:
+            bot.reply_to(message, "⚠️ الرجاء إدخال اسم صحيح (حروف فقط، وليس أرقاماً).")
             return
-        user_states[user_id] = f"waiting_phone|{text}"
+        
+        # التحقق من أن الاسم ليس أرقاماً فقط
+        if text.strip().isdigit():
+            bot.reply_to(message, "⚠️ الاسم لا يمكن أن يكون أرقاماً فقط. الرجاء إدخال اسم صحيح.")
+            return
+        
+        user_states[user_id] = f"waiting_phone|{text.strip()}"
         bot.reply_to(message, 
             "📱 *أدخل رقم الهاتف:*\n"
             "مثال: `0912345678`",
@@ -731,6 +739,9 @@ def handle_text(message):
         phone = text.strip()
         if not phone.isdigit():
             bot.reply_to(message, "⚠️ رقم الهاتف يجب أن يحتوي على أرقام فقط.")
+            return
+        if len(phone) < 9:
+            bot.reply_to(message, "⚠️ رقم الهاتف قصير جداً. تأكد من إدخاله بشكل صحيح.")
             return
         user_states[user_id] = f"waiting_shamcash|{name}|{phone}"
         bot.reply_to(message, 
@@ -777,7 +788,7 @@ def handle_text(message):
         
         bot.reply_to(message,
             f"✅ *تم تسجيل الملف الشخصي بنجاح*\n\n"
-            f"👤 الاسم الثلاثي: {name}\n"
+            f"👤 الاسم: {name}\n"
             f"📱 رقم الهاتف: {phone}\n"
             f"🔑 كود الشام كاش: `{shamcash_code}`",
             parse_mode='Markdown',
