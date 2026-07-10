@@ -12,8 +12,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 
 # --------------------- الإعدادات ---------------------
 TOKEN = "8855886445:AAE7PhgeUauhQ9rQ4mjJqQmhOg9ccRGreYo"
-# معرفات المجموعات المسموحة (أضف معرف مجموعتك الجديدة هنا)
-GROUP_IDS = [-1004481566972, -1005467645618]  # المجموعة الأولى والثانية
+# البوت يعمل في جميع المجموعات - لا حاجة لتحديد معرفات
 DATA_FILE = "data.json"
 
 # إنشاء البوت
@@ -189,6 +188,11 @@ user_states = {}
 @bot.message_handler(commands=['start'])
 def start(message):
     """رسالة ترحيبية مع أزرار"""
+    # التحقق من أن البوت يعمل في مجموعة
+    if message.chat.type not in ["group", "supergroup"]:
+        bot.reply_to(message, "👋 مرحباً بك! هذا البوت يعمل فقط في المجموعات.")
+        return
+    
     bot.reply_to(message, 
         "👋 *مرحباً بك في بوت تتبع الأرصدة*\n\n"
         "📌 *الأزرار المتاحة:*\n"
@@ -207,6 +211,8 @@ def start(message):
 @bot.message_handler(func=lambda message: message.text == "➕ إيداع")
 def deposit(message):
     """زر الإيداع"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     user_states[message.from_user.id] = "waiting_deposit_amount"
     bot.reply_to(message, 
         "📥 *إيداع مبلغ*\n\n"
@@ -219,6 +225,8 @@ def deposit(message):
 @bot.message_handler(func=lambda message: message.text == "➖ سحب")
 def withdraw(message):
     """زر السحب"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     user_states[message.from_user.id] = "waiting_withdraw_amount"
     bot.reply_to(message, 
         "📤 *سحب مبلغ*\n\n"
@@ -231,6 +239,8 @@ def withdraw(message):
 @bot.message_handler(func=lambda message: message.text == "💰 رصيدي")
 def my_balance(message):
     """عرض الرصيد"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     user_id_str = str(message.from_user.id)
     
@@ -249,11 +259,15 @@ def my_balance(message):
 @bot.message_handler(func=lambda message: message.text == "📊 تقارير")
 def reports(message):
     """قائمة التقارير"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     bot.reply_to(message, "📊 *اختر نوع التقرير:*", parse_mode='Markdown', reply_markup=report_menu())
 
 @bot.message_handler(func=lambda message: message.text == "📊 تقرير اليوم")
 def report_today(message):
     """تقرير اليوم"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     if not data:
         bot.reply_to(message, "📭 لا توجد معاملات اليوم.")
@@ -308,6 +322,8 @@ def report_today(message):
 @bot.message_handler(func=lambda message: message.text == "📊 تقرير كامل")
 def full_report(message):
     """تقرير كامل"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     if not data:
         bot.reply_to(message, "📭 لا توجد معاملات.")
@@ -344,6 +360,8 @@ def full_report(message):
 @bot.message_handler(func=lambda message: message.text == "📋 سجل معاملاتي")
 def my_history(message):
     """سجل معاملاتي"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     user_id_str = str(message.from_user.id)
     
@@ -374,6 +392,8 @@ def my_history(message):
 @bot.message_handler(func=lambda message: message.text == "👤 ملفي الشخصي")
 def my_profile_menu(message):
     """قائمة الملف الشخصي"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn1 = KeyboardButton("📋 عرض ملفي")
     btn2 = KeyboardButton("✏️ تسجيل / تحديث")
@@ -384,6 +404,8 @@ def my_profile_menu(message):
 @bot.message_handler(func=lambda message: message.text == "📋 عرض ملفي")
 def show_my_profile(message):
     """عرض الملف الشخصي"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     user_id_str = str(message.from_user.id)
     
@@ -413,6 +435,8 @@ def show_my_profile(message):
 @bot.message_handler(func=lambda message: message.text == "✏️ تسجيل / تحديث")
 def update_profile_start(message):
     """بدء تسجيل الملف الشخصي"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     user_states[message.from_user.id] = "waiting_full_name"
     bot.reply_to(message, 
         "✏️ *تسجيل / تحديث الملف الشخصي*\n\n"
@@ -425,6 +449,8 @@ def update_profile_start(message):
 @bot.message_handler(func=lambda message: message.text == "🔑 كود الشام كاش")
 def my_shamcash_code(message):
     """عرض كود الشام كاش"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     user_id_str = str(message.from_user.id)
     
@@ -452,6 +478,8 @@ def my_shamcash_code(message):
 @bot.message_handler(func=lambda message: message.text == "📋 قائمة الأكواد")
 def list_codes(message):
     """عرض قائمة الأكواد (للمشرفين)"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -491,6 +519,8 @@ def list_codes(message):
 @bot.message_handler(func=lambda message: message.text == "⚙️ إدارة")
 def admin_panel(message):
     """لوحة التحكم (للمشرفين فقط)"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     try:
         chat_member = bot.get_chat_member(message.chat.id, message.from_user.id)
         if chat_member.status not in ["administrator", "creator"]:
@@ -505,12 +535,16 @@ def admin_panel(message):
 @bot.message_handler(func=lambda message: message.text == "📋 تقرير موظف")
 def admin_user_report(message):
     """تقرير موظف معين"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     user_states[message.from_user.id] = "admin_waiting_username"
     bot.reply_to(message, "👤 أدخل اسم المستخدم المراد التقرير عنه:\nمثال: `@أحمد`")
 
 @bot.message_handler(func=lambda message: message.text == "📊 جميع المعاملات")
 def admin_all_transactions(message):
     """جميع المعاملات"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     data = load_data()
     if not data:
         bot.reply_to(message, "📭 لا توجد معاملات.")
@@ -536,18 +570,24 @@ def admin_all_transactions(message):
 @bot.message_handler(func=lambda message: message.text == "🔄 تصفير الكل")
 def admin_reset_all(message):
     """تصفير الأرصدة فقط"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     user_states[message.from_user.id] = "admin_confirm_reset"
     bot.reply_to(message, "⚠️ *تأكيد تصفير الكل*\n\nهل أنت متأكد من تصفير جميع الأرصدة؟\n📌 الملفات الشخصية والأكواد محفوظة.\n\nأرسل `نعم` للتأكيد أو `لا` للإلغاء.", parse_mode='Markdown')
 
 @bot.message_handler(func=lambda message: message.text == "🔄 تصفير موظف")
 def admin_reset_user(message):
     """تصفير موظف معين"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     user_states[message.from_user.id] = "admin_waiting_reset_user"
     bot.reply_to(message, "👤 أدخل اسم المستخدم المراد تصفير رصيده:\nمثال: `@أحمد`")
 
 @bot.message_handler(func=lambda message: message.text == "🔙 رجوع")
 def go_back(message):
     """العودة للقائمة الرئيسية"""
+    if message.chat.type not in ["group", "supergroup"]:
+        return
     bot.reply_to(message, "🔙 تم العودة للقائمة الرئيسية", reply_markup=main_menu())
 
 # --------------------- معالجة الكولباك (الأزرار التفاعلية) ---------------------
@@ -573,8 +613,8 @@ def handle_callback(call):
 
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
-    # التحقق من أن الرسالة من مجموعة مسموحة
-    if message.chat.id not in GROUP_IDS:
+    # السماح للبوت بالعمل في أي مجموعة
+    if message.chat.type not in ["group", "supergroup"]:
         return
     
     text = message.text.strip()
@@ -901,9 +941,9 @@ def handle_text(message):
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("🤖 بوت تتبع الأرصدة (نسخة الأزرار المتطورة)")
+    print("🤖 بوت تتبع الأرصدة - يعمل في جميع المجموعات")
     print("=" * 40)
-    print(f"✅ المجموعات المسموحة: {GROUP_IDS}")
+    print("✅ البوت يعمل في جميع المجموعات (بدون تحديد معرفات)")
     print("🔄 البوت يعمل مع إعادة تشغيل تلقائي...")
     print("📋 الملفات الشخصية وأكواد الشام كاش محفوظة")
     print("=" * 40)
