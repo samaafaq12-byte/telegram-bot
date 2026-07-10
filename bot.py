@@ -12,7 +12,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 
 # --------------------- الإعدادات ---------------------
 TOKEN = "8855886445:AAE7PhgeUauhQ9rQ4mjJqQmhOg9ccRGreYo"
-GROUP_ID = -1004481566972
+GROUP_ID = -1004481566972,-5467645618
 DATA_FILE = "data.json"
 
 # إنشاء البوت
