@@ -12,7 +12,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 
 # --------------------- الإعدادات ---------------------
 TOKEN = "8855886445:AAE7PhgeUauhQ9rQ4mjJqQmhOg9ccRGreYo"
-GROUP_ID = -1004481566972,-5467645618
+# معرفات المجموعات المسموحة (أضف معرف مجموعتك الجديدة هنا)
+GROUP_IDS = [-1004481566972, -1005467645618]  # المجموعة الأولى والثانية
 DATA_FILE = "data.json"
 
 # إنشاء البوت
@@ -572,7 +573,8 @@ def handle_callback(call):
 
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
-    if message.chat.id != GROUP_ID:
+    # التحقق من أن الرسالة من مجموعة مسموحة
+    if message.chat.id not in GROUP_IDS:
         return
     
     text = message.text.strip()
@@ -901,7 +903,7 @@ if __name__ == "__main__":
     print("=" * 40)
     print("🤖 بوت تتبع الأرصدة (نسخة الأزرار المتطورة)")
     print("=" * 40)
-    print(f"✅ معرف المجموعة: {GROUP_ID}")
+    print(f"✅ المجموعات المسموحة: {GROUP_IDS}")
     print("🔄 البوت يعمل مع إعادة تشغيل تلقائي...")
     print("📋 الملفات الشخصية وأكواد الشام كاش محفوظة")
     print("=" * 40)
