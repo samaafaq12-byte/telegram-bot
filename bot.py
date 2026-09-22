@@ -10,7 +10,7 @@ import time
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 # --------------------- الإعدادات ---------------------
-TOKEN = os.environ.get("8855886445:AAE7PhgeUauhQ9rQ4mjJqQmhOg9ccRGreYo")
+TOKEN = os.environ.get("8664701635:AAFU_FQ-rAVjqFR0vZ_od7knPZSaEEUfq7k")
 DATA_FILE = "data.json"
 
 bot = telebot.TeleBot(TOKEN)
