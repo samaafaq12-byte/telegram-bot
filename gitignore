@@ -1,4 +1,1 @@
-data.json
-__pycache__/
-*.pyc
-.env
+worker: python bot.py
