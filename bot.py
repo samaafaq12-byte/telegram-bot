@@ -1,5 +1,5 @@
 import re
-from simpleeval import simple_eval, InvalidExpression
+from simpleeval import simple_eval
 from telegram import Update, BotCommand
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -14,30 +14,57 @@ def normalize(text):
     text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
     return text.replace("×", "*").replace("÷", "/").replace("−", "-")
 
+def big(text):
+    """تكبير الأرقام"""
+    for n in "0123456789":
+        text = text.replace(n, f"`{n}`")
+    return text
+
 def fmt(n):
-    return f"{n:,.2f}"
+    """رقم بدون فواصل"""
+    if n == int(n):
+        return str(int(n))
+    return f"{n:.2f}".rstrip("0").rstrip(".")
+
+def get_bal(uid):
+    if uid not in balances:
+        balances[uid] = {"usd": 0, "try": 0}
+    return balances[uid]
+
+def show_balance(uid):
+    b = get_bal(uid)
+    return (
+        f"💵 *دولار:* {big(fmt(b['usd']))}\n"
+        f"💷 *ليرة:* {big(fmt(b['try']))}"
+    )
 
 # ==================== الأوامر ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 *بوت الحسابات والدفعات*\n\n"
-        "🧮 `2000 / 135` — عملية حسابية\n"
-        "➕ `+2000` — إضافة دفعة\n"
-        "➖ `-7000` — خصم دفعة\n\n"
-        "💰 /balance — عرض الرصيد\n"
-        "🔄 /reset — تصفير الرصيد",
+        "🧮 *الحساب:*\n"
+        "  `6000 / 141`\n\n"
+        "💵 *الدولار:*\n"
+        "  `+2000$` — إضافة\n"
+        "  `-7000$` — خصم\n\n"
+        "💷 *الليرة:*\n"
+        "  `+2000` — إضافة\n"
+        "  `-7000` — خصم\n\n"
+        "💰 /balance — الرصيد\n"
+        "🔄 /reset — تصفير",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bal = balances.get(update.effective_user.id, 0)
+    uid = update.effective_user.id
     await update.message.reply_text(
-        f"💰 *الرصيد*\n\n`{fmt(bal)}`",
+        f"💰 *الرصيد*\n\n{show_balance(uid)}",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    balances[update.effective_user.id] = 0
+    uid = update.effective_user.id
+    balances[uid] = {"usd": 0, "try": 0}
     await update.message.reply_text("🔄 تم تصفير الرصيد.")
 
 # ==================== معالج الرسائل ====================
@@ -47,6 +74,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = normalize(update.message.text.strip())
     uid = update.effective_user.id
+    bal = get_bal(uid)
     
     if text.startswith("/"):
         return
@@ -56,7 +84,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             result = simple_eval(text)
             await update.message.reply_text(
-                f"🧮 *النتيجة*\n\n`{fmt(result)}`",
+                f"🧮 {big(text)} = {big(fmt(result))}",
                 parse_mode=ParseMode.MARKDOWN
             )
         except ZeroDivisionError:
@@ -65,30 +93,48 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ عملية غير صحيحة.")
         return
     
-    # ➕ إضافة دفعة
-    m = re.match(r"^\+\s*([\d\.]+)$", text)
-    if m:
-        amount = float(m.group(1))
-        balances[uid] = balances.get(uid, 0) + amount
-        await update.message.reply_text(
-            f"➕ *تمت الإضافة*\n\n"
-            f"المبلغ: `+{fmt(amount)}`\n"
-            f"الرصيد: `{fmt(balances[uid])}`",
-            parse_mode=ParseMode.MARKDOWN
-        )
+    # 💵 دولار
+    m = re.match(r"^([\+\-])\s*([\d\.]+)\s*\$?$", text)
+    if m and "$" in text:
+        sign, amount = m.group(1), float(m.group(2))
+        if sign == "+":
+            bal["usd"] += amount
+            await update.message.reply_text(
+                f"💵 *تمت الإضافة (دولار)*\n\n"
+                f"المبلغ: {big('+' + fmt(amount))}\n\n"
+                f"{show_balance(uid)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            bal["usd"] -= amount
+            await update.message.reply_text(
+                f"💵 *تم الخصم (دولار)*\n\n"
+                f"المبلغ: {big('-' + fmt(amount))}\n\n"
+                f"{show_balance(uid)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
         return
     
-    # ➖ خصم دفعة
-    m = re.match(r"^\-\s*([\d\.]+)$", text)
+    # 💷 ليرة
+    m = re.match(r"^([\+\-])\s*([\d\.]+)$", text)
     if m:
-        amount = float(m.group(1))
-        balances[uid] = balances.get(uid, 0) - amount
-        await update.message.reply_text(
-            f"➖ *تم الخصم*\n\n"
-            f"المبلغ: `-{fmt(amount)}`\n"
-            f"الرصيد: `{fmt(balances[uid])}`",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        sign, amount = m.group(1), float(m.group(2))
+        if sign == "+":
+            bal["try"] += amount
+            await update.message.reply_text(
+                f"💷 *تمت الإضافة (ليرة)*\n\n"
+                f"المبلغ: {big('+' + fmt(amount))}\n\n"
+                f"{show_balance(uid)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            bal["try"] -= amount
+            await update.message.reply_text(
+                f"💷 *تم الخصم (ليرة)*\n\n"
+                f"المبلغ: {big('-' + fmt(amount))}\n\n"
+                f"{show_balance(uid)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
         return
 
 # ==================== الإقلاع ====================
